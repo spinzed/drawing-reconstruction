@@ -1,0 +1,100 @@
+ wimport torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.distributions.normal import Normal
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+"""
+Model inspired by https://arxiv.org/pdf/2102.12037
+Not a classical variational conditional model.
+This version is able to utilize pretraining on classical 
+VAE model.
+This model is made to be used on stroke paths
+Unfinished!
+"""
+
+class IPA(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim=400, latent_dim=200, path_size = 10):
+        super(VAE, self).__init__()
+        
+        # encoder
+        self.encoder_full = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_dim, latent_dim),
+            nn.LeakyReLU(0.2)
+        )
+
+        # encoder, vjerovatno nije losa ideja sve enkodere i dekodere staviti u drugi file tako da ih možemo lakše isprobavati
+        # encoder
+        self.encoder_partial = nn.Sequential(
+            nn.Linear(2*input_dim, hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_dim, latent_dim),
+            nn.LeakyReLU(0.2)
+        )        
+        
+        # latent mean and variance 
+        self.enc_full_mean_layer = nn.Linear(hidden_dim, latent_dim)
+        self.enc_full__logvar_layer = nn.Linear(hidden_dim, latent_dim)
+        self.enc_partial_mean_layer = nn.Linear(hidden_dim, path_size) 
+        self.enc_partial_logvar_layer = nn.Linear(hidden_dim, path_size)
+        
+        # decoder
+        self.decoder = nn.Sequential(
+            nn.Linear(2, latent_dim),
+            nn.LeakyReLU(0.2),
+            nn.Linear(latent_dim, hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_dim, input_dim)
+        )
+
+        self.dec_mean_layer = nn.Linear(hidden_dim, path_size)
+        self.dec_mean_layer = nn.Linear(hidden_dim, path_size)
+     
+    def encode(self, x):
+        x = self.encoder(x)
+        mean, logvar = self.enc_mean_layer(x), self.enc_logvar_layer(x)
+        return mean, logvar
+
+    def reparameterization(self, mean, logvar):
+        epsilon = torch.randn_like(torch.exp(0.5*var).to(device)      
+        z = mean + var*epsilon
+        return 
+
+    def decode(self, x):
+        mean, logvar = self.dec_mean_layer(x), self.dec_logvar_layer(x)
+        return mean, logvar
+
+    def forward(self, x):
+        enc_mean, enc_logvar = self.encode(x)
+        dec_mean, dec_logvar = self.decode(x)
+
+        z = self.reparameterization(enc_mean, enc_logvar)
+        x_hat = self.decode(z)
+        return x_hat, enc_mean, enc_logvar, dec_mean, dec_logvar
+
+    def loss(x, z):
+        """
+        Implementation of elbo for vae
+        """
+        x, dec_mean, dec_logvar, enc_full_mean, enc_full_logvar, enc_partial_mean, enc_partial_logvar = self.forward(x)
+
+        dec_dist = Normal(dec_mean, torch.exp(0.5*dec_logvar))
+        enc_dist_full = Normal(enc_full_mean, torch.exp(0.5*enc_logvar))
+        enc_dist_partial = Normal(enc_mean, torch.exp(0.5*enc_logvar))
+        standard_dist = Normal(torch.zeros_like(z), torch.ones_like(z))
+        
+        
+        neglog_dec = -dec_dist.log_prob(z)
+        neglog_enc = -enc_dist.log_prob(x)
+        neglog_pz = -standard_dist.log_prob(z)
+
+        loss = (neglog_dec + neglog_enc + neglog_pz).mean()
+
+        return loss
+           
+        
+        

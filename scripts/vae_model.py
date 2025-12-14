@@ -30,6 +30,7 @@ class VAE(nn.Module):
             nn.Linear(hidden_dim, input_dim),
             nn.Sigmoid()
         )
+
      
     def encode(self, x):
         x = self.encoder(x)
@@ -49,3 +50,5 @@ class VAE(nn.Module):
         z = self.reparameterization(mean, logvar)
         x_hat = self.decode(z)
         return x_hat, mean, logvar
+    
+        
