@@ -17,10 +17,10 @@ class ImageDataset(Dataset):
         self.count = len(self.loaded)
 
         print(f"Found {len(filenames)} files, in total {self.count} entires")
-    
+
     def __len__(self):
         return self.count
-    
+
     def __getitem__(self, i):
         entry = self.loaded[i] # https://github.com/googlecreativelab/quickdraw-dataset?tab=readme-ov-file#the-raw-moderated-dataset
         strokes = entry["drawing"]

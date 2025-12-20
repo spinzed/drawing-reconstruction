@@ -18,43 +18,47 @@ def lerp(x1, y1, x2, y2):
     """
     xs = []
     ys = []
-    
+
     dx = abs(x2 - x1)
     dy = abs(y2 - y1)
-    
+
     # Determine direction of line
     sx = 1 if x1 < x2 else -1
     sy = 1 if y1 < y2 else -1
-    
+
     err = dx - dy
-    
+
     x, y = x1, y1
-    
+
     while True:
         xs.append(x)
         ys.append(y)
-        
+
         # Check if we've reached the end point
         if x == x2 and y == y2:
             break
-        
+
         e2 = 2 * err
-        
+
         if e2 > -dy:
             err -= dy
             x += sx
-        
+
         if e2 < dx:
             err += dx
             y += sy
-    
+
     return xs, ys
 
-def compile_img(strokes, shape=(256,256)):
-    img = np.ones(shape)
+def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None):
+    assert end is None or end <= len(strokes), "end must be smaller or equal to list size"
+
+    if img is None:
+        img = np.ones(shape)
 
     # draw each stroke
-    for stroke in strokes:
+    for stroke_ind in range(start, end if end is not None else len(strokes)):
+        stroke = strokes[stroke_ind]
         xs = stroke[0]
         ys = stroke[1]
 
@@ -72,14 +76,18 @@ def compile_img(strokes, shape=(256,256)):
             current_x = xs[i]
             current_y = ys[i]
 
-        img[final_xs, final_ys] = 0
+        img[final_ys, final_xs] = 0
     return img
 
 # for debugging
-if __name__ == "__main__":
-    a = load_ndjson("quickdraw/cat.ndjson")
-    strokes = a[0]["drawing"]
-    img = compile_img(strokes)
+class CompileTest:
+    def __init__(self):
+        self.test_data = load_ndjson("quickdraw/cat.ndjson")
 
-    plt.imshow(img, cmap="grey")
-    plt.show()
+    def test(self, index=0, size=100):
+        strokes = self.test_data[index]["drawing"]
+        print(f"strokes size: {len(strokes)}")
+        img = compile_img(strokes, end=min(len(strokes), size))
+
+        plt.imshow(img, cmap="grey")
+        plt.show()
