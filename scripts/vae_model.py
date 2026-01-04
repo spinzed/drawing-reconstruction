@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -16,11 +15,11 @@ class VAE(nn.Module):
             nn.Linear(hidden_dim, latent_dim),
             nn.LeakyReLU(0.2)
         )
-        
-        # latent mean and variance 
+
+        # latent mean and variance
         self.mean_layer = nn.Linear(latent_dim, 2)
         self.logvar_layer = nn.Linear(latent_dim, 2)
-        
+
         # decoder
         self.decoder = nn.Sequential(
             nn.Linear(2, latent_dim),
@@ -31,14 +30,13 @@ class VAE(nn.Module):
             nn.Sigmoid()
         )
 
-     
     def encode(self, x):
         x = self.encoder(x)
         mean, logvar = self.mean_layer(x), self.logvar_layer(x)
         return mean, logvar
 
     def reparameterization(self, mean, var):
-        epsilon = torch.randn_like(var).to(device)      
+        epsilon = torch.randn_like(var).to(device)
         z = mean + var*epsilon
         return z
 
@@ -50,5 +48,3 @@ class VAE(nn.Module):
         z = self.reparameterization(mean, logvar)
         x_hat = self.decode(z)
         return x_hat, mean, logvar
-    
-        
