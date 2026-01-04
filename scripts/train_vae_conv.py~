@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-from vae_model_classic import VAE
+from vae_model import VAE
 from dataset import ImageDataset
 
 # ---------------------------------------------------------------------
@@ -27,8 +27,9 @@ config = {
     "epochs": 20000000,
     "lr": 1e-4,
     "weight_decay": 1e-5,
-    "grad_clip": None
+    "grad_clip": None,
     #"loss": nn.L1Loss(),
+    "loss": nn.MSELoss(),
 }
 
 # ---------------------------------------------------------------------
@@ -40,7 +41,7 @@ def get_y(x, out):
         return torch.min(x, 1-out)
     return out
 
-def eval_loss(loader, model):
+def eval_loss(loader, loss):
     model.eval()
 
     L_total = 0
@@ -55,7 +56,7 @@ def eval_loss(loader, model):
             y = get_y(X, out)
             y = y.reshape((X.shape[0],) + image_size)
             batch_size = X.size(0)
-            L_total += model.loss(y).item() * batch_size
+            L_total += loss(y, y_).item() * batch_size
             total_samples += batch_size
 
     return L_total / total_samples
@@ -106,6 +107,8 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 
             for i, (X_imgs, y_, cats) in enumerate(train_loader):
                 optimizer.zero_grad()
+
+                X = X_imgs.reshape((X_imgs.shape[0], image_size[0] * image_size[1]))
 
                 X = X.to(device, dtype=torch.float32)
                 y_ = y_.to(device, dtype=torch.float32)
@@ -167,8 +170,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 # ---------------------------------------------------------------------
 
 if __name__ == "__main__":
-    print(image_size[0])
-    model = VAE(image_size[0] * image_size[1], 20)
+    model = VAE(image_size[0] * image_size[1], 400, 200)
 
     dataset = ImageDataset(dataset_dir, image_size, image_limit, item=item)
     print("Dataset loaded")
