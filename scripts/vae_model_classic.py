@@ -69,9 +69,10 @@ class GaussianDecoder(nn.Module):
 
 class VAE(nn.Module):
     """Minimal VAE keeping per-pixel logvar loss"""
-    def __init__(self, input_dim, latent_dim=200):
+    def __init__(self, input_dim, latent_dim=200, device = torch.device('cuda'):
         super().__init__()
         self.latent_dim = latent_dim
+        self.device = device
 
         self.encoder = GaussianEncoder(input_dim=input_dim, latent_dim=latent_dim)
         self.decoder = GaussianDecoder(latent_dim=latent_dim, output_dim=input_dim)
@@ -84,7 +85,7 @@ class VAE(nn.Module):
         return enc_mean, enc_logvar, dec_mean, dec_logvar
 
     def sample(self, temperature = 1):
-        z = torch.randn([1, self.latent_dim])
+        z = torch.randn([1, self.latent_dim], device = self.device)
         dec_mean, dec_logvar = self.decoder(z)
         return reparametrization(dec_mean, dec_logvar * temperature)
     
