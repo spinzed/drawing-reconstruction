@@ -64,6 +64,7 @@ class GaussianDecoder(nn.Module):
 
         x_mean = self.mean_head(h)
         x_logvar = self.logvar_head(h)
+        x_logvar = torch.clamp(x_logvar, -6.0, 2.0)
         return x_mean, x_logvar
 
 
