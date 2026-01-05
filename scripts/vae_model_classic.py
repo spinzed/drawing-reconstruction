@@ -69,7 +69,7 @@ class GaussianDecoder(nn.Module):
 
 class VAE(nn.Module):
     """Minimal VAE keeping per-pixel logvar loss"""
-    def __init__(self, input_dim, latent_dim=200, device = torch.device('cuda'):
+    def __init__(self, input_dim, latent_dim=200, device = torch.device('cuda')):
         super().__init__()
         self.latent_dim = latent_dim
         self.device = device
