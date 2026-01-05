@@ -27,7 +27,8 @@ config = {
     "epochs": 20000000,
     "lr": 1e-4,
     "weight_decay": 1e-5,
-    "grad_clip": None
+    "grad_clip": None,
+    "loss": VAE.loss
     #"loss": nn.L1Loss(),
 }
 
@@ -40,22 +41,20 @@ def get_y(x, out):
         return torch.min(x, 1-out)
     return out
 
-def eval_loss(loader, model):
+def eval_loss(loader, loss):
     model.eval()
 
     L_total = 0
     total_samples = 0
 
     with torch.no_grad():
-        for X, y_, cats in loader:
-            X = X.reshape((X.shape[0], image_size[0] * image_size[1]))
+        for X, y_, cats in loader:            
             X = X.to(device, dtype=torch.float32)
+            X = X.unsqueeze(1)
             y_ = y_.to(device, dtype=torch.float32)
-            out, _, _ = model(X)
-            y = get_y(X, out)
-            y = y.reshape((X.shape[0],) + image_size)
+            enc_mean, enc_logvar, dec_mean, dec_logvar = model(X)
             batch_size = X.size(0)
-            L_total += model.loss(y).item() * batch_size
+            L_total += loss(X, enc_mean, enc_logvar, dec_mean, dec_logvar).item() * batch_size
             total_samples += batch_size
 
     return L_total / total_samples
@@ -85,7 +84,6 @@ def save_model(model):
 # ---------------------------------------------------------------------
 
 def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, config):
-    loss = config["loss"]
     optimizer = torch.optim.Adam(params=model.parameters(), lr=config["lr"], weight_decay=config["weight_decay"])
 
     model = model.to(device)
@@ -98,6 +96,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
     n_graphs = 4
     f, axarr = plt.subplots(1, n_graphs, figsize=(3 * n_graphs, 4))
     t = time.time()
+    loss = config["loss"]
 
     try:
         for epoch in range(epochs):
@@ -105,16 +104,14 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             model.train()
 
             for i, (X_imgs, y_, cats) in enumerate(train_loader):
-                optimizer.zero_grad()
+                optimizer.zero_grad()                
+                
+                X = X_imgs.to(device, dtype=torch.float32)
+                X = X.unsqueeze(1)                
 
-                X = X.to(device, dtype=torch.float32)
-                y_ = y_.to(device, dtype=torch.float32)
-
-                out, _, _ = model(X)
-                y = get_y(X, out)
-                y = y.reshape((X.shape[0],) + image_size)
-
-                L = loss(y, y_)
+                enc_mean, enc_logvar, dec_mean, dec_logvar = model(X)
+                L = loss(X, enc_mean, enc_logvar, dec_mean, dec_logvar)
+                
                 L.backward()
                 if config["grad_clip"] is not None:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), config["grad_clip"])
@@ -130,11 +127,11 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
 
-            img_partial = X_imgs[0].cpu().detach().numpy()
-            img_full = y_[0].cpu().detach().numpy()
-            img_reconstructed = y[0].cpu().detach().numpy()
-            img_reconstructed_binary = binarize(img_reconstructed)
-
+            img_original = X_imgs[0].cpu().detach().numpy()
+            img_new = model.sample()
+            img_new = img_new.squeeze(0).squeeze(0)
+            img_new = img_new.detach().cpu().numpy()
+            
             if time.time() - t >= 1:
                 t = time.time()
                 try:
@@ -143,8 +140,8 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                     pass
                 visualize(
                     axarr,
-                    [img_partial, img_full, img_reconstructed, img_reconstructed_binary],
-                    ["Partial", "Full", "Reconstructed", "Binarized"]
+                    [img_original, img_new],
+                    ["Partial", "New"]
                 )
                 plt.pause(0.01)
 
@@ -168,7 +165,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 
 if __name__ == "__main__":
     print(image_size[0])
-    model = VAE(image_size[0] * image_size[1], 20)
+    model = VAE(image_size[0], 20)
 
     dataset = ImageDataset(dataset_dir, image_size, image_limit, item=item)
     print("Dataset loaded")

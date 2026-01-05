@@ -76,29 +76,34 @@ class VAE(nn.Module):
         self.encoder = GaussianEncoder(input_dim=input_dim, latent_dim=latent_dim)
         self.decoder = GaussianDecoder(latent_dim=latent_dim, output_dim=input_dim)
 
-    def reparametrization(self, mean, logvar):
-        std = torch.exp(0.5 * logvar)
-        epsilon = torch.randn_like(std)
-        return mean + std * epsilon
 
     def forward(self, x):
         enc_mean, enc_logvar = self.encoder(x)
-        z = self.reparametrization(enc_mean, enc_logvar)
+        z = reparametrization(enc_mean, enc_logvar)
         dec_mean, dec_logvar = self.decoder(z)
-        return x, enc_mean, enc_logvar, dec_mean, dec_logvar
+        return enc_mean, enc_logvar, dec_mean, dec_logvar
 
-    def loss(self, x):
-        x, enc_mean, enc_logvar, dec_mean, dec_logvar = self.forward(x)
-
-        z = self.reparametrization(enc_mean, enc_logvar)
+    def sample(self, temperature = 1):
+        z = torch.randn([1, self.latent_dim])
+        dec_mean, dec_logvar = self.decoder(z)
+        return reparametrization(dec_mean, dec_logvar * temperature)
+    
+    @staticmethod
+    def loss(x, enc_mean, enc_logvar, dec_mean, dec_logvar):
+        z = reparametrization(enc_mean, enc_logvar)
 
         dec_dist = Normal(dec_mean, torch.exp(0.5 * dec_logvar))
         enc_dist = Normal(enc_mean, torch.exp(0.5 * enc_logvar))
         standard_dist = Normal(torch.zeros_like(z), torch.ones_like(z))
 
-        neglog_dec = -dec_dist.log_prob(z)
-        neglog_enc = -enc_dist.log_prob(x)
-        neglog_pz = -standard_dist.log_prob(z)
-
-        loss = (neglog_dec - neglog_enc + neglog_pz).mean()
+        neglog_dec = -dec_dist.log_prob(x)
+        neglog_dec = torch.flatten(neglog_dec, start_dim=1).sum(dim=-1)
+        neglog_enc = -enc_dist.log_prob(z).sum(dim=-1)
+        neglog_pz = -standard_dist.log_prob(z).sum(dim=-1)
+        loss = (neglog_dec - neglog_enc + neglog_pz).mean(dim=0)
         return loss
+
+def reparametrization(mean, logvar):
+    std = torch.exp(0.5 * logvar)
+    epsilon = torch.randn_like(std)
+    return mean + std * epsilon
