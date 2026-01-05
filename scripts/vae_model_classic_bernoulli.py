@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from torch.distributions.normal import Normal, ContinuousBernoulli
+from torch.distributions.normal import Normal
+from torch.distributions.continuous_bernoulli import ContinuousBernoulli
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -55,22 +56,17 @@ class GaussianDecoder(nn.Module):
 
     
         self.mean_head = nn.ConvTranspose2d(16, 1, kernel_size=4, stride=2, padding=1)
-        self.logvar_head = nn.ConvTranspose2d(16, 1, kernel_size=4, stride=2, padding=1)
 
     def forward(self, z):
         h = self.fc(z)
         h = h.view(z.size(0), self.init_channels, self.init_spatial, self.init_spatial)
         h = self.trunk(h)
-
-        x_mean = self.mean_head(h)
-        x_logvar = self.logvar_head(h)
-        x_logvar = torch.clamp(x_logvar, -6.0, 2.0)
-        return x_mean, x_logvar
-
+        x_mean = self.mean_head(h) # logits for bernoulli
+        return x_mean
 
 class VAE(nn.Module):
     """Minimal VAE keeping per-pixel logvar loss"""
-    def __init__(self, input_dim, latent_dim=200, device = torch.device('cuda')):
+    def __init__(self, input_dim, latent_dim=200, device = torch.device('cpu')):
         super().__init__()
         self.latent_dim = latent_dim
         self.device = device
@@ -82,19 +78,19 @@ class VAE(nn.Module):
     def forward(self, x):
         enc_mean, enc_logvar = self.encoder(x)
         z = reparametrization(enc_mean, enc_logvar)
-        dec_mean, dec_logvar = self.decoder(z)
-        return enc_mean, enc_logvar, dec_mean, dec_logvar
+        dec_mean = self.decoder(z)
+        return enc_mean, enc_logvar, dec_mean, None
 
     def sample(self, temperature = 1):
         z = torch.randn([1, self.latent_dim], device = self.device)
-        dec_mean, dec_logvar = self.decoder(z)
-        return reparametrization(dec_mean, dec_logvar * temperature)
+        dec_mean = self.decoder(z)
+        return dec_mean
     
     @staticmethod
-    def loss(x, enc_mean, enc_logvar, dec_mean, dec_logvar):
+    def loss(x, enc_mean, enc_logvar, dec_mean, dec_logvar = None):
         z = reparametrization(enc_mean, enc_logvar)
 
-        dec_dist = ContinuousBernoulli(dec_mean, torch.exp(0.5 * dec_logvar))
+        dec_dist = ContinuousBernoulli(logits = dec_mean)
         enc_dist = Normal(enc_mean, torch.exp(0.5 * enc_logvar))
         standard_dist = Normal(torch.zeros_like(z), torch.ones_like(z))
 

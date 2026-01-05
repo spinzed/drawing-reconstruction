@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-from vae_model_classic import VAE
+from vae_model_classic_bernoulli import VAE
 from dataset import ImageDataset
 
 # ---------------------------------------------------------------------
@@ -25,9 +25,9 @@ model_residual = False
 
 config = {
     "epochs": 20000000,
-    "lr": 1e-4,
-    "weight_decay": 1e-5,
-    "grad_clip": None,
+    "lr": 1e-5,
+    "weight_decay": 1e-6,
+    "grad_clip": 1e-1,
     "loss": VAE.loss
     #"loss": nn.L1Loss(),
 }
@@ -118,7 +118,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 grad_norm = np.sqrt(sum([torch.norm(p.grad)**2 for p in model.parameters()]).cpu())
                 optimizer.step()
 
-                print(f"---> {i+1}/{len(train_loader)}, loss: {L:.6f}, grad_norm: {grad_norm:.6f}")
+                #print(f"---> {i+1}/{len(train_loader)}, loss: {L:.6f}, grad_norm: {grad_norm:.6f}")
 
             L_train = eval_loss(train_loader, loss)
             L_val = eval_loss(val_loader, loss)
