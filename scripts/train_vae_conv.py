@@ -26,7 +26,7 @@ latent_dim  = 128
 
 config = {
     "epochs": 20000,
-    "lr": 1e-5,
+    "lr": 1e-3,
     "weight_decay": 1e-10,
     "grad_clip": 10,
     "loss": VAE.loss
@@ -128,7 +128,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
 
-            img_original = X_imgs[0].cpu().detach().numpy()
+            img_original = y_[0].cpu().detach().numpy()
             img_new = model.sample()
             img_new = img_new.squeeze(0).squeeze(0)
             img_new = img_new.detach().cpu().numpy()
@@ -139,12 +139,10 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                     f.canvas.manager.set_window_title(f"Epoch {epoch}")
                 except:
                     pass
-                visualize(
-                    axarr,
-                    [img_original, img_new],
-                    ["Partial", "New"]
-                )
+                visualize(axarr, [img_original, img_new], ["Original", "Sample"])
                 plt.pause(0.01)
+                
+
 
     except KeyboardInterrupt:
         print("Early stop")
