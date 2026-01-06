@@ -22,12 +22,13 @@ model_weights_save_path = "weights.pth"
 #item = "cat"
 item = "ice cream"
 model_residual = False
+latent_dim  = 512
 
 config = {
-    "epochs": 20000000,
+    "epochs": 20000,
     "lr": 1e-5,
-    "weight_decay": 1e-6,
-    "grad_clip": 1e-1,
+    "weight_decay": 1e-10,
+    "grad_clip": 10,
     "loss": VAE.loss
     #"loss": nn.L1Loss(),
 }
@@ -106,7 +107,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             for i, (X_imgs, y_, cats) in enumerate(train_loader):
                 optimizer.zero_grad()                
                 
-                X = X_imgs.to(device, dtype=torch.float32)
+                X = y_.to(device, dtype=torch.float32)
                 X = X.unsqueeze(1)                
 
                 enc_mean, enc_logvar, dec_mean, dec_logvar = model(X)
@@ -165,7 +166,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 
 if __name__ == "__main__":
     print(image_size[0])
-    model = VAE(image_size[0], 20)
+    model = VAE(image_size[0], latent_dim)
 
     dataset = ImageDataset(dataset_dir, image_size, image_limit, item=item)
     print("Dataset loaded")

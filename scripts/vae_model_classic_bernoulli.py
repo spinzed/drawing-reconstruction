@@ -3,22 +3,28 @@ import torch.nn as nn
 from torch.distributions.normal import Normal
 from torch.distributions.continuous_bernoulli import ContinuousBernoulli
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-
 class GaussianEncoder(nn.Module):
     """Convolutional encoder producing (mu, logvar)"""
     def __init__(self, input_dim, latent_dim):
         super().__init__()
 
         self.net = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=0),
+            nn.Conv2d(1, 32, 3, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(32, 32, 3, padding=1),
             nn.LeakyReLU(0.2),
             nn.MaxPool2d(2),
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=0),
+
+            nn.Conv2d(32, 64, 3, padding=1),
             nn.LeakyReLU(0.2),
-            nn.MaxPool2d(2)
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.MaxPool2d(2),
+
+            nn.Conv2d(64, 128, 3, padding=1),
+            nn.LeakyReLU(0.2),
         )
+
 
         # Automatically compute flattened dimension
         with torch.no_grad():
@@ -41,7 +47,7 @@ class GaussianDecoder(nn.Module):
         super().__init__()
         self.output_dim = output_dim
 
-        self.init_channels = 32
+        self.init_channels = 128
         self.init_spatial = output_dim // 4  # must match encoder downsampling
 
         self.fc = nn.Sequential(
@@ -50,12 +56,18 @@ class GaussianDecoder(nn.Module):
         )
 
         self.trunk = nn.Sequential(
-            nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1),
+            nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.LeakyReLU(0.2),
+
+            nn.ConvTranspose2d(64, 32, 4, stride=2, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(32, 32, 3, padding=1),
             nn.LeakyReLU(0.2),
         )
-
     
-        self.mean_head = nn.ConvTranspose2d(16, 1, kernel_size=4, stride=2, padding=1)
+        self.mean_head = nn.Conv2d(32, 1, kernel_size=3, padding=1)
 
     def forward(self, z):
         h = self.fc(z)
@@ -84,7 +96,9 @@ class VAE(nn.Module):
     def sample(self, temperature = 1):
         z = torch.randn([1, self.latent_dim], device = self.device)
         dec_mean = self.decoder(z)
-        return dec_mean
+        img = torch.sigmoid(dec_mean)
+        return img
+        
     
     @staticmethod
     def loss(x, enc_mean, enc_logvar, dec_mean, dec_logvar = None):
