@@ -17,12 +17,12 @@ batch_size = 32
 device = "cuda" if torch.cuda.is_available() else "cpu"
 image_limit = 1000
 image_size = (256, 256)
-binarization_threshold = 0.5
+binarization_threshold = 0.65
 model_weights_save_path = "weights.pth"
 #item = "cat"
 item = "ice cream"
 model_residual = False
-latent_dim  = 512
+latent_dim  = 128
 
 config = {
     "epochs": 20000,
@@ -166,7 +166,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 
 if __name__ == "__main__":
     print(image_size[0])
-    model = VAE(image_size[0], latent_dim)
+    model = VAE(image_size[0], latent_dim, torch.device(device))
 
     dataset = ImageDataset(dataset_dir, image_size, image_limit, item=item)
     print("Dataset loaded")
