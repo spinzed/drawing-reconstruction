@@ -13,16 +13,16 @@ from dataset import ImageDataset
 # ---------------------------------------------------------------------
 
 dataset_dir = "quickdraw"
-batch_size = 32
+batch_size = 8
 device = "cuda" if torch.cuda.is_available() else "cpu"
-image_limit = 1000
+image_limit = 10000
 image_size = (256, 256)
 binarization_threshold = 0.65
 model_weights_save_path = "weights.pth"
 #item = "cat"
 item = "ice cream"
 model_residual = False
-latent_dim  = 128
+latent_dim  = 200
 
 config = {
     "epochs": 20000,
@@ -139,7 +139,8 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                     f.canvas.manager.set_window_title(f"Epoch {epoch}")
                 except:
                     pass
-                visualize(axarr, [img_original, img_new], ["Original", "Sample"])
+                binarized = binarize(img_new)
+                visualize(axarr, [img_original, img_new, binarized], ["Original", "Sample", "Binarized"])
                 plt.pause(0.01)
                 
 

@@ -8,7 +8,7 @@ import numpy as np
 import time
 import os
 import utils
-from generator import Generator
+from generator import VaeGenerator, ConvVaeGenerator
 
 def numpy_to_qpixmap(arr: np.ndarray) -> QPixmap:
     if arr.dtype != np.uint8:
@@ -128,7 +128,7 @@ Main. app
 class ImageApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.generator = Generator()
+        self.generator = ConvVaeGenerator()
         self.setWindowTitle("Generated Image Viewer")
 
         # --- Dropdowns ---
