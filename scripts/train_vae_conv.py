@@ -17,17 +17,17 @@ batch_size = 32
 device = "cuda" if torch.cuda.is_available() else "cpu"
 image_limit = 1000
 image_size = (256, 256)
-binarization_threshold = 0.65
+binarization_threshold = 0.7
 model_weights_save_path = "weights.pth"
 #item = "cat"
 item = "ice cream"
 model_residual = False
-latent_dim  = 128
+latent_dim  = 64
 
 config = {
     "epochs": 20000,
-    "lr": 1e-5,
-    "weight_decay": 1e-10,
+    "lr": 1e-3,
+    "weight_decay": 1e-9,
     "grad_clip": 10,
     "loss": VAE.loss
     #"loss": nn.L1Loss(),
@@ -50,7 +50,7 @@ def eval_loss(loader, loss):
 
     with torch.no_grad():
         for X, y_, cats in loader:            
-            X = X.to(device, dtype=torch.float32)
+            X = y_.to(device, dtype=torch.float32)
             X = X.unsqueeze(1)
             y_ = y_.to(device, dtype=torch.float32)
             enc_mean, enc_logvar, dec_mean, dec_logvar = model(X)

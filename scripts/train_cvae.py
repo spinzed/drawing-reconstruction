@@ -3,51 +3,87 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
-import os
+import time
 
-from vae_mode_classic import VAE
+from cvae_model import CVAE as VAE
 from dataset import ImageDataset
-from utils import compile_img
-from torch.nn.utils.rnn import pad_sequence
 
-def collate_fn(batch):
-    #budući da se strokevi sastoje od x, y, p potrebno je strokese pretvrotiti u jednodimenzionalni vektor
-    strokes, words = zip(*batch)
-    print(strokes)
-    strokes = [torch.tensor(stroke) for stroke in strokes]
-    strokes = pad_sequence(strokes)
-    print(words)
-    return torch.flatten(strokes)
-
-# Global setup
-
-os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
-
+# ---------------------------------------------------------------------
 # Global variables
+# ---------------------------------------------------------------------
 
 dataset_dir = "quickdraw"
-batch_size = 8
+batch_size = 32
 device = "cuda" if torch.cuda.is_available() else "cpu"
 image_limit = 1000
+image_size = (256, 256)
+binarization_threshold = 0.7
+model_weights_save_path = "weights.pth"
+#item = "cat"
+item = "ice cream"
+model_residual = False
+latent_dim  = 64
 
 config = {
-    "epochs": 20,
-    "lr": 10e-4,
-    "weight_decay": 10e-5,
-    "grad_clip": None,
+    "epochs": 20000,
+    "lr": 1e-3,
+    "weight_decay": 1e-9,
+    "grad_clip": 10,
+    "loss": VAE.loss
+    #"loss": nn.L1Loss(),
 }
 
+# ---------------------------------------------------------------------
 # Helper functions
-    
-def eval_loss(loader, model):
-    L_total = 0
-    with torch.no_grad():
-        for X, y_ in loader:
-            X = X.to(device)
-            L_total += model.loss(X)
-    return L_total / len(loader)
+# ---------------------------------------------------------------------
 
+def get_y(x, out):
+    if model_residual:
+        return torch.min(x, 1-out)
+    return out
+
+def eval_loss(loader, loss):
+    model.eval()
+
+    L_total = 0
+    total_samples = 0
+
+    with torch.no_grad():
+        for X, y_, cats in loader:            
+            X = y_.to(device, dtype=torch.float32)
+            X = X.unsqueeze(1)
+            y_ = y_.unsqueeze(1)
+            y_ = y_.to(device, dtype=torch.float32)
+            z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
+            batch_size = X.size(0)
+            L_total += loss(X, enc_mean, enc_logvar, dec_mean, dec_logvar).item() * batch_size
+            total_samples += batch_size
+
+    return L_total / total_samples
+
+def visualize(axarr, images, titles):
+    assert len(images) == len(titles)
+    for ax in axarr:
+        ax.clear()
+        ax.set_aspect('equal')
+        ax.axis('off')
+
+    for i, image in enumerate(images):
+        axarr[i].imshow(image, cmap="grey")
+        axarr[i].set_title(titles[i])
+
+def binarize(img):
+    binary = np.ones_like(img, dtype=np.float32)
+    binary[img < binarization_threshold] = 0
+    return binary
+
+def save_model(model):
+    torch.save(model.state_dict(), model_weights_save_path)
+    print(f"Model weights saved to {model_weights_save_path}")
+
+# ---------------------------------------------------------------------
 # Train function
+# ---------------------------------------------------------------------
 
 def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, config):
     optimizer = torch.optim.Adam(params=model.parameters(), lr=config["lr"], weight_decay=config["weight_decay"])
@@ -58,54 +94,93 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
     grad_norms = []
     epochs = int(config["epochs"])
 
+    plt.ion()
+    n_graphs = 4
+    f, axarr = plt.subplots(1, n_graphs, figsize=(3 * n_graphs, 4))
+    t = time.time()
+    loss = config["loss"]
+
     try:
         for epoch in range(epochs):
             print(f"Epoch {epoch+1}/{epochs}")
             model.train()
 
-            for i, (X, y_) in enumerate(train_loader):
-                optimizer.zero_grad()
+            for i, (X_imgs, y_, cats) in enumerate(train_loader):
+                optimizer.zero_grad()                
                 
-                model.loss(X_)
+                X = X_imgs.to(device, dtype=torch.float32)
+                y_ = y_.to(device, dtype=torch.float32)
+                X = X.unsqueeze(1)
+                y_ = y_.unsqueeze(1)
+                
+                z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
+                L = loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0)
                 
                 L.backward()
-                if config["grad_clip"] != None:
+                if config["grad_clip"] is not None:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), config["grad_clip"])
                 grad_norm = np.sqrt(sum([torch.norm(p.grad)**2 for p in model.parameters()]).cpu())
-                print(f"---> {i+1}/{len(train_loader)}, loss: {L}, grad_norm: {grad_norm}")
                 optimizer.step()
+
+                #print(f"---> {i+1}/{len(train_loader)}, loss: {L:.6f}, grad_norm: {grad_norm:.6f}")
 
             L_train = eval_loss(train_loader, loss)
             L_val = eval_loss(val_loader, loss)
-            Ls_train.append(L_train.cpu())
-            Ls_val.append(L_val.cpu())
+            Ls_train.append(L_train)
+            Ls_val.append(L_val)
+
+            print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
+
+            img_original = X_imgs[0].cpu().detach().numpy()
+            img_new = model.sample()
+            img_new = img_new.squeeze(0).squeeze(0)
+            img_new = img_new.detach().cpu().numpy()
             
-            print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train}, loss_val: {L_val}")
+            if time.time() - t >= 1:
+                t = time.time()
+                try:
+                    f.canvas.manager.set_window_title(f"Epoch {epoch}")
+                except:
+                    pass
+                visualize(
+                    axarr,
+                    [img_original, img_new],
+                    ["Partial", "New"]
+                )
+                plt.pause(0.01)
 
     except KeyboardInterrupt:
         print("Early stop")
-    
+
+    plt.ioff()
+    plt.close()
+
     plt.plot(Ls_train, label="Train Losses")
     plt.plot(Ls_val, label="Val Losses")
+    vals = sorted(Ls_train + Ls_val)
+    cutoff = vals[int(0.5 * len(vals))] * 2
+    plt.ylim(0, cutoff)
     plt.show()
 
 
+# ---------------------------------------------------------------------
 # Main
+# ---------------------------------------------------------------------
 
 if __name__ == "__main__":
-    model = VAE(28*28, 400, 200)
+    print(image_size[0])
+    model = VAE(image_size[0], latent_dim, torch.device(device))
 
-    dataset = ImageDataset(dataset_dir)
-    print(f"Dataset loaded")
+    dataset = ImageDataset(dataset_dir, image_size, image_limit, item=item)
+    print("Dataset loaded")
 
     train_set, val_set, test_set = torch.utils.data.random_split(dataset, [0.7, 0.15, 0.15])
-    train_loader = DataLoader(dataset=train_set, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-    val_loader = DataLoader(dataset=val_set, batch_size=batch_size, shuffle=True, collate_fn = collate_fn)
-    test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+    train_loader = DataLoader(dataset=train_set, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(dataset=val_set, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=True)
 
-    # TODO: fix all of this below
-    print(f"Train: {len(train_set)}, val: {len(val_set)}, test: {len(test_set)}")
-    
+    print(f"Train: {len(train_set):.6f}, val: {len(val_set):.6f}, test: {len(test_set):.6f}")
+
     train(model, train_loader, val_loader, config)
 
     loss = config["loss"]
@@ -114,15 +189,36 @@ if __name__ == "__main__":
     L_val = eval_loss(val_loader, loss)
     L_test = eval_loss(test_loader, loss)
 
-    print(f"Final losses: train - {L_train}, val - {L_val}, test - {L_test}")
+    print(f"Final losses: train - {L_train:.6f}, val - {L_val:.6f}, test - {L_test:.6f}")
+
+    save_model(model)
 
     try:
         while True:
-            Xhat_ = model.sample()
-            d = Xhat_.shape[-1] // 3
-            strokes = torch.reshape(3, d)
-            img = compile_img(strokes)
-            plt.imshow(img, cmap='grey')
+            i = np.random.randint(0, len(test_set))
+            img_partial, img_full, cat = test_set[i]
+            x = img_partial.reshape((1, image_size[0] * image_size[1]))
+            xd = x.to(device, dtype=torch.float32)
+            y_d = img_full.to(device, dtype=torch.float32)
+            with torch.no_grad():
+                outd, _, _ = model(xd)
+                yd = get_y(xd, outd)
+                yd = yd.reshape(image_size)
+            y = yd.cpu()
+
+            L = loss(yd, y_d)
+            print(f"Loss: {L}")
+
+            img_reconstructed = y
+            img_reconstructed_binary = binarize(img_reconstructed)
+
+            n_graphs = 4
+            f, axarr = plt.subplots(1, n_graphs, figsize=(3 * n_graphs, 4))
+            visualize(
+                axarr,
+                [img_partial, img_full, img_reconstructed, img_reconstructed_binary],
+                ["Partial", "Full", "Reconstructed", "Binarized"]
+            )
             plt.show()
 
     except KeyboardInterrupt:

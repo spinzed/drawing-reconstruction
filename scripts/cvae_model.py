@@ -1,94 +1,132 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.distributions import Normal, ContinuousBernoulli, kl_divergence
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+def reparametrize(mu, logvar):
+    std = torch.exp(0.5 * logvar)
+    eps = torch.randn_like(std)
+    return mu + eps * std
 
-class CVAE(nn.Module):
+class GaussianEncoder(nn.Module):
+    """Convolutional encoder producing (mu, logvar)"""
+    def __init__(self, in_channels, latent_dim, input_dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(in_channels, 32, 3, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(32, 32, 3, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.AvgPool2d(2),
 
-    def __init__(self, input_dim, hidden_dim=400, latent_dim=200, K=10):
-        super(CVAE, self).__init__()
+            nn.Conv2d(32, 64, 3, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.AvgPool2d(2),
 
-        # encoder
-        self.encoder = Encoder()
-        
-        # latent mean and variance 
-        self.mean_layer = nn.Linear(latent_dim, K)
-        self.logvar_layer = nn.Linear(latent_dim, K)
+            nn.Conv2d(64, 128, 3, padding=1),
+            nn.LeakyReLU(0.2),
+        )
 
-        self.decoder = Decoder()
-        
-     
-    def encode(self, x):
-        z = self.encoder(x)
-        mean, logvar = self.mean_layer(z), self.logvar_layer(z)
-        return mean, logvar
+        # Automatically compute flattened dimension
+        with torch.no_grad():
+            dummy = torch.zeros(1, in_channels, input_dim, input_dim)
+            h = self.net(dummy)
+            self.flatten_dim = h.view(1, -1).size(1)
 
-    def reparameterization(self, mean, var):
-        epsilon = torch.randn_like(var).to(device)      
-        z = mean + var*epsilon
-        return z
-
-    def decode(self, z):
-        x = self.decoder(z)
+        self.mean = nn.Linear(self.flatten_dim, latent_dim)
+        self.logvar = nn.Linear(self.flatten_dim, latent_dim)
 
     def forward(self, x):
-        mean, logvar = self.encode(x)
-        z = self.reparameterization(mean, logvar)
-        x_hat = self.decode(z)
-        return x_hat, mean, logvar
+        h = self.net(x)
+        h = torch.flatten(h, 1)
+        return self.mean(h), self.logvar(h)
 
-    def sample():
-        epsilon = torch.randn_like(
-        
+class GaussianDecoder(nn.Module):
+    """Decoder modeling p(x|z,y)"""
+    def __init__(self, latent_dim, input_dim):
+        super().__init__()
+        self.init_channels = 128
+        self.init_spatial = input_dim // 4  # match encoder downsampling
 
-class DNN_encoder(nn.Module):
-    def __init__(self, hidden_dim, latent_dim):
-        self.encoder = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, latent_dim),
+        # Project latent z to feature map
+        self.fc = nn.Sequential(
+            nn.Linear(latent_dim, self.init_channels * self.init_spatial * self.init_spatial),
             nn.LeakyReLU(0.2)
         )
-        return z
-            
-class CNN_encoder(nn.Module):
-    def __init__(self, w, h, hidden_dim=400, latent_dim=200):
-        self.cnn = nn.Sequential(nn.Conv2d(c, 16, 5, padding = 0), nn.BatchNorm2d(16), nn.LeakyRelu(0.2), 
-            nn.Conv2d(16, 32, 5, padding = 0), nn.BatchNorm2d(32), nn.LeakyRelu(0.2), 
-            nn.MaxPool2d(2, 2),
-            nn.Conv2d(32, 64, 3, padding = 0), nn.BatchNorm2d(64), nn.LeakyRelu(0.2), 
-            nn.Conv2d(64, 64, 3, padding = 0), nn.BatchNorm2d(64), nn.LeakyRelu(0.2), 
-            nn.MaxPool2d(2, 2),
-            Flatten()
-        )
-            
-        w_new = ((w - 8) // 2 - 4)
-        h_new = ((h - 8) // 2 - 4)
-        d = 64*w_new*h_new
-            
-        self.mlp = nn.Sequential(
-            nn.Linear(d, hidden_dim), nn.BatchNorm1d(hidden_dim), nn.LeakyRelu(0.2),
-            nn.Linear(d, hidden_dim), nn.BatchNorm1d(hidden_dim), nn.LeakyRelu(0.2),
-            nn.Linear(hidden_dim, latent_dim)
-        )
-    def forward():
-        
-        
-class DNN_decoder(nn.Module):
-    def __init__(self, hidden_dim, latent_dim):
-        self.encoder = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
+
+        # Conv decoder
+        self.trunk = nn.Sequential(
+            nn.ConvTranspose2d(self.init_channels + 1, 64, 4, stride=2, padding=1),
             nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, latent_dim),
-            nn.LeakyReLU(0.2)
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.LeakyReLU(0.2),
+
+            nn.ConvTranspose2d(64, 32, 4, stride=2, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(32, 32, 3, padding=1),
+            nn.LeakyReLU(0.2),
         )
-        return z
-            
-class CNN_decoder(nn.Module):
-    def __init__(self, w, h, hidden_dim=400, latent_dim=200):
-        self.mlp = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim), nn.BatchNorm1d(hidden_dim), nn.LeakyRelu(0.2),
-            nn.Linear(d, hidden_dim), nn.BatchNorm1d(hidden_dim), nn.LeakyRelu(0.2),
-            nn.Linear(hidden_dim, latent_dim)
-        )
+
+        self.mean_head = nn.Conv2d(32, 1, 3, padding=1)  # output logits for Bernoulli
+
+    def forward(self, z, y):
+        # Project z
+        h = self.fc(z)
+        h = h.view(z.size(0), self.init_channels, self.init_spatial, self.init_spatial)
+
+        # Downsample y to match spatial size
+        y_ds = F.interpolate(y, size=(self.init_spatial, self.init_spatial), mode="bilinear", align_corners=False)
+
+        # Concatenate along channels
+        h = torch.cat([h, y_ds], dim=1)
+
+        # Decode
+        h = self.trunk(h)
+        x_logits = self.mean_head(h)
+        return x_logits
+
+class CVAE(nn.Module):
+    def __init__(self, input_dim, latent_dim=200, device="cpu"):
+        super().__init__()
+        self.latent_dim = latent_dim
+        self.device = device
+
+        # Encoder q(z|x,y) and prior p(z|y)
+        self.encoder_prior = GaussianEncoder(in_channels=1, latent_dim=latent_dim, input_dim=input_dim)
+        self.encoder_post = GaussianEncoder(in_channels=2, latent_dim=latent_dim, input_dim=input_dim)
+
+        # Decoder p(x|z,y)
+        self.decoder = GaussianDecoder(latent_dim=latent_dim, input_dim=input_dim)
+
+    def forward(self, x, y):
+        mu_p, logvar_p = self.encoder_prior(y)
+        
+        xy = torch.cat([x, y], dim=1)
+        mu_q, logvar_q = self.encoder_post(xy)
+
+        z = reparametrize(mu_q, logvar_q)
+
+        x_logits = self.decoder(z, y)
+        x_prob = torch.sigmoid(x_logits)
+
+        return z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob
+
+    def sample(self, y):
+        z = torch.randn([y.size(0), self.latent_dim], device=y.device)
+        x_logits = self.decoder(z, y)
+        return torch.sigmoid(x_logits)
+
+    @staticmethod
+    def loss(x, y, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0):
+        """CVAE ELBO loss"""
+        recon_loss = F.binary_cross_entropy_with_logits(x_logits, x, reduction='none')
+        recon_loss = recon_loss.flatten(1).sum(1)  # sum over pixels
+
+        q_dist = Normal(mu_q, torch.exp(0.5 * logvar_q))
+        p_dist = Normal(mu_p, torch.exp(0.5 * logvar_p))
+        kl = kl_divergence(q_dist, p_dist).sum(1)
+
+        loss = (recon_loss + beta * kl).mean()
+        return loss
