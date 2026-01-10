@@ -13,21 +13,21 @@ from dataset import ImageDataset
 # ---------------------------------------------------------------------
 
 dataset_dir = "quickdraw"
-batch_size = 32
+batch_size = 8
 device = "cuda" if torch.cuda.is_available() else "cpu"
-image_limit = 1000
+image_limit = 10000
 image_size = (256, 256)
 binarization_threshold = 0.7
 model_weights_save_path = "weights.pth"
 #item = "cat"
 item = "ice cream"
 model_residual = False
-latent_dim  = 64
+latent_dim  = 200
 
 config = {
     "epochs": 20000,
     "lr": 1e-3,
-    "weight_decay": 1e-9,
+    "weight_decay": 1e-10,
     "grad_clip": 10,
     "loss": VAE.loss
     #"loss": nn.L1Loss(),
@@ -128,7 +128,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
 
-            img_original = X_imgs[0].cpu().detach().numpy()
+            img_original = y_[0].cpu().detach().numpy()
             img_new = model.sample()
             img_new = img_new.squeeze(0).squeeze(0)
             img_new = img_new.detach().cpu().numpy()
@@ -139,12 +139,11 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                     f.canvas.manager.set_window_title(f"Epoch {epoch}")
                 except:
                     pass
-                visualize(
-                    axarr,
-                    [img_original, img_new],
-                    ["Partial", "New"]
-                )
+                binarized = binarize(img_new)
+                visualize(axarr, [img_original, img_new, binarized], ["Original", "Sample", "Binarized"])
                 plt.pause(0.01)
+                
+
 
     except KeyboardInterrupt:
         print("Early stop")
