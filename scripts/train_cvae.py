@@ -56,7 +56,7 @@ def eval_loss(loader, loss):
             y_ = y_.to(device, dtype=torch.float32)
             z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
             batch_size = X.size(0)
-            L_total += loss(X, enc_mean, enc_logvar, dec_mean, dec_logvar).item() * batch_size
+            L_total += loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0).item() * batch_size
             total_samples += batch_size
 
     return L_total / total_samples
@@ -69,7 +69,7 @@ def visualize(axarr, images, titles):
         ax.axis('off')
 
     for i, image in enumerate(images):
-        axarr[i].imshow(image, cmap="grey")
+        axarr[i].imshow(image, cmap="Greys")
         axarr[i].set_title(titles[i])
 
 def binarize(img):
@@ -132,7 +132,8 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
 
             img_original = X_imgs[0].cpu().detach().numpy()
-            img_new = model.sample()
+            print(f"before {y_.shape}")
+            img_new = model.sample(y_[0].unsqueeze(0))
             img_new = img_new.squeeze(0).squeeze(0)
             img_new = img_new.detach().cpu().numpy()
             

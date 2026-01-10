@@ -75,7 +75,7 @@ class GaussianDecoder(nn.Module):
         # Project z
         h = self.fc(z)
         h = h.view(z.size(0), self.init_channels, self.init_spatial, self.init_spatial)
-
+        #print(f"y shape {y.shape}")
         # Downsample y to match spatial size
         y_ds = F.interpolate(y, size=(self.init_spatial, self.init_spatial), mode="bilinear", align_corners=False)
 
