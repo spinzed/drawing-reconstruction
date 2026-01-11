@@ -128,5 +128,5 @@ class CVAE(nn.Module):
         p_dist = Normal(mu_p, torch.exp(0.5 * logvar_p))
         kl = kl_divergence(q_dist, p_dist).sum(1)
 
-        loss = (recon_loss + beta * kl).mean()
+        loss = (recon_loss - beta * kl).mean()
         return loss
