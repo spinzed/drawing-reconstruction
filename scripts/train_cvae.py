@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-from cvae_model import CVAE as VAE
+from cvae_model_decoderz import CVAE as VAE
 from dataset import ImageDataset
 
 # ---------------------------------------------------------------------
@@ -17,16 +17,16 @@ batch_size = 32
 device = "cuda" if torch.cuda.is_available() else "cpu"
 image_limit = 1000
 image_size = (256, 256)
-binarization_threshold = 0.72
-model_weights_save_path = "weights.pth"
+binarization_threshold = 0.55
+model_weights_save_path = "ice_weights.pth"
 #item = "cat"
 item = "ice cream"
 model_residual = False
-latent_dim  = 64
+latent_dim  = 128
 
 config = {
-    "epochs": 20000,
-    "lr": 1e-4,
+    "epochs": 100,
+    "lr": 1e-3,
     "weight_decay": 1e-9,
     "grad_clip": 10,
     "loss": VAE.loss
@@ -54,9 +54,9 @@ def eval_loss(loader, loss):
             X = X.unsqueeze(1)
             y_ = y_.unsqueeze(1)
             y_ = y_.to(device, dtype=torch.float32)
-            z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
+            z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(y_, X)
             batch_size = X.size(0)
-            L_total += loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0).item() * batch_size
+            L_total += loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0).item() * batch_size
             total_samples += batch_size
 
     return L_total / total_samples
@@ -113,8 +113,8 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 X = X.unsqueeze(1)
                 y_ = y_.unsqueeze(1)
                 
-                z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
-                L = loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0)
+                z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(y_, X)
+                L = loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0)
                 
                 L.backward()
                 if config["grad_clip"] is not None:
@@ -130,10 +130,11 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             Ls_val.append(L_val)
 
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
-
+	  
             img_original = X_imgs[0].cpu().detach().numpy()
+            print(X.shape)
             
-            img_new = model.sample(y_[0].unsqueeze(0))
+            img_new = model.sample(X[0].unsqueeze(0))
             img_new = img_new.squeeze(0).squeeze(0)
             img_new = img_new.detach().cpu().numpy()
             img_new_b = binarize(img_new)

@@ -54,15 +54,10 @@ class GaussianDecoder(nn.Module):
             nn.Linear(latent_dim, self.init_channels * self.init_spatial * self.init_spatial),
             nn.LeakyReLU(0.2)
         )
-        film_net = nn.Sequential(
-            nn.Linear(y_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 2 * num_channels)  # gamma + beta
-        )   
 
         # Conv decoder
         self.trunk = nn.Sequential(
-            nn.ConvTranspose2d(self.init_channels + 1, 64, 4, stride=2, padding=1),
+            nn.ConvTranspose2d(self.init_channels, 64, 4, stride=2, padding=1),
             nn.LeakyReLU(0.2),
             nn.Conv2d(64, 64, 3, padding=1),
             nn.LeakyReLU(0.2),
@@ -75,12 +70,9 @@ class GaussianDecoder(nn.Module):
 
         self.mean_head = nn.Conv2d(32, 1, 3, padding=1)  # output logits for Bernoulli
 
-    def forward(self, z, y):
+    def forward(self, z):
         h = self.fc(z)
         h = h.view(z.size(0), self.init_channels, self.init_spatial, self.init_spatial)
-  
-        y_ds = F.interpolate(y, size=(self.init_spatial, self.init_spatial), mode="bilinear", align_corners=False)
-        h = torch.cat([h, y_ds], dim=1)
 
         h = self.trunk(h)
         x_logits = self.mean_head(h)
@@ -105,14 +97,16 @@ class CVAE(nn.Module):
 
         z = reparametrize(mu_q, logvar_q)
 
-        x_logits = self.decoder(z, y)
+        x_logits = self.decoder(z)
         x_prob = torch.sigmoid(x_logits)
 
         return z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob
 
     def sample(self, y):
-        z = torch.randn([y.size(0), self.latent_dim], device=y.device)
-        x_logits = self.decoder(z, y)
+        mu_p, logvar_p = self.encoder_prior(y)
+        z = reparametrize(mu_p, logvar_p)        
+        
+        x_logits = self.decoder(z)
         return torch.sigmoid(x_logits)
 
     @staticmethod
