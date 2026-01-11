@@ -45,7 +45,7 @@ class GaussianEncoder(nn.Module):
 
 class GaussianDecoder(nn.Module):
     """Decoder modeling p(x|z,y)"""
-    def __init__(self, latent_dim, input_dim):
+    def __init__(self, latent_dim, input_dim, film_hidden = 128):
         super().__init__()
         self.init_channels = 128
         self.init_spatial = input_dim // 4  # match encoder downsampling
@@ -54,10 +54,13 @@ class GaussianDecoder(nn.Module):
             nn.Linear(latent_dim, self.init_channels * self.init_spatial * self.init_spatial),
             nn.LeakyReLU(0.2)
         )
-        film_net = nn.Sequential(
-            nn.Linear(y_dim, hidden_dim),
+
+        self.down_block = nn.AvgPool2d(kernel_size=4, 4)
+        
+        self.film_net = nn.Sequential(
+            nn.Linear(self.init_spatial * self.init_spatial, film_hidden),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 2 * num_channels)  # gamma + beta
+            nn.Linear(film_hidden_dim, 2*self.init_channels)  # gamma + beta
         )   
 
         # Conv decoder
@@ -72,14 +75,16 @@ class GaussianDecoder(nn.Module):
             nn.Conv2d(32, 32, 3, padding=1),
             nn.LeakyReLU(0.2),
         )
-
+        
         self.mean_head = nn.Conv2d(32, 1, 3, padding=1)  # output logits for Bernoulli
 
     def forward(self, z, y):
+        y = self.down_block(y)
         h = self.fc(z)
+        gamma, beta = self.film_net(y).chunk(2, dim=1)
+        h = gamma*y + beta
         h = h.view(z.size(0), self.init_channels, self.init_spatial, self.init_spatial)
   
-        y_ds = F.interpolate(y, size=(self.init_spatial, self.init_spatial), mode="bilinear", align_corners=False)
         h = torch.cat([h, y_ds], dim=1)
 
         h = self.trunk(h)
