@@ -17,7 +17,7 @@ batch_size = 32
 device = "cuda" if torch.cuda.is_available() else "cpu"
 image_limit = 1000
 image_size = (256, 256)
-binarization_threshold = 0.7
+binarization_threshold = 0.72
 model_weights_save_path = "weights.pth"
 #item = "cat"
 item = "ice cream"
@@ -69,7 +69,7 @@ def visualize(axarr, images, titles):
         ax.axis('off')
 
     for i, image in enumerate(images):
-        axarr[i].imshow(image, cmap="Greys")
+        im = axarr[i].imshow(image, cmap="Greys_r")
         axarr[i].set_title(titles[i])
 
 def binarize(img):
@@ -132,7 +132,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
 
             img_original = X_imgs[0].cpu().detach().numpy()
-            print(f"before {y_.shape}")
+            
             img_new = model.sample(y_[0].unsqueeze(0))
             img_new = img_new.squeeze(0).squeeze(0)
             img_new = img_new.detach().cpu().numpy()
@@ -146,11 +146,12 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                     pass
                 visualize(
                     axarr,
-                    [img_original, img_new],
+                    [img_original, img_new, img_new_b],
                     ["Partial", "New", "New Binarized"]
                 )
                 plt.pause(0.01)
-
+                print(f"Max: {np.max(img_new)}")
+                print(f"Min: {np.min(img_new)}")
     except KeyboardInterrupt:
         print("Early stop")
 
