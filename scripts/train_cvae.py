@@ -26,7 +26,7 @@ latent_dim  = 64
 
 config = {
     "epochs": 20000,
-    "lr": 1e-3,
+    "lr": 1e-4,
     "weight_decay": 1e-9,
     "grad_clip": 10,
     "loss": VAE.loss
@@ -136,6 +136,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             img_new = model.sample(y_[0].unsqueeze(0))
             img_new = img_new.squeeze(0).squeeze(0)
             img_new = img_new.detach().cpu().numpy()
+            img_new_b = binarize(img_new)
             
             if time.time() - t >= 1:
                 t = time.time()
@@ -146,7 +147,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 visualize(
                     axarr,
                     [img_original, img_new],
-                    ["Partial", "New"]
+                    ["Partial", "New", "New Binarized"]
                 )
                 plt.pause(0.01)
 

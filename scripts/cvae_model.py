@@ -50,7 +50,6 @@ class GaussianDecoder(nn.Module):
         self.init_channels = 128
         self.init_spatial = input_dim // 4  # match encoder downsampling
 
-        # Project latent z to feature map
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, self.init_channels * self.init_spatial * self.init_spatial),
             nn.LeakyReLU(0.2)
@@ -72,17 +71,12 @@ class GaussianDecoder(nn.Module):
         self.mean_head = nn.Conv2d(32, 1, 3, padding=1)  # output logits for Bernoulli
 
     def forward(self, z, y):
-        # Project z
         h = self.fc(z)
         h = h.view(z.size(0), self.init_channels, self.init_spatial, self.init_spatial)
-        #print(f"y shape {y.shape}")
-        # Downsample y to match spatial size
+  
         y_ds = F.interpolate(y, size=(self.init_spatial, self.init_spatial), mode="bilinear", align_corners=False)
-
-        # Concatenate along channels
         h = torch.cat([h, y_ds], dim=1)
 
-        # Decode
         h = self.trunk(h)
         x_logits = self.mean_head(h)
         return x_logits
@@ -93,11 +87,9 @@ class CVAE(nn.Module):
         self.latent_dim = latent_dim
         self.device = device
 
-        # Encoder q(z|x,y) and prior p(z|y)
         self.encoder_prior = GaussianEncoder(in_channels=1, latent_dim=latent_dim, input_dim=input_dim)
         self.encoder_post = GaussianEncoder(in_channels=2, latent_dim=latent_dim, input_dim=input_dim)
 
-        # Decoder p(x|z,y)
         self.decoder = GaussianDecoder(latent_dim=latent_dim, input_dim=input_dim)
 
     def forward(self, x, y):
@@ -122,11 +114,11 @@ class CVAE(nn.Module):
     def loss(x, y, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0):
         """CVAE ELBO loss"""
         recon_loss = F.binary_cross_entropy_with_logits(x_logits, x, reduction='none')
-        recon_loss = recon_loss.flatten(1).sum(1)  # sum over pixels
+        recon_loss = recon_loss.flatten(1).mean(1)  
 
         q_dist = Normal(mu_q, torch.exp(0.5 * logvar_q))
         p_dist = Normal(mu_p, torch.exp(0.5 * logvar_p))
-        kl = kl_divergence(q_dist, p_dist).sum(1)
+        kl = kl_divergence(q_dist, p_dist).mean(1)
 
-        loss = (recon_loss - beta * kl).mean()
+        loss = (recon_loss + beta * kl).mean()
         return loss
