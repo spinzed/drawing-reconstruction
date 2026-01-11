@@ -54,10 +54,10 @@ class GaussianDecoder(nn.Module):
             nn.Linear(latent_dim, self.init_channels * self.init_spatial * self.init_spatial),
             nn.LeakyReLU(0.2)
         )
-        film_net = nn.Sequential(
-            nn.Linear(y_dim, hidden_dim),
+        self.film_net = nn.Sequential(
+            nn.Linear(input_dim**2, self.init_spatial),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 2 * num_channels)  # gamma + beta
+            nn.Linear(self.init_spatial, 2*latent_dim)  
         )   
 
         # Conv decoder
@@ -76,12 +76,14 @@ class GaussianDecoder(nn.Module):
         self.mean_head = nn.Conv2d(32, 1, 3, padding=1)  # output logits for Bernoulli
 
     def forward(self, z, y):
+        y = torch.flatten(y, start_dim=1)
+        gamma, beta = self.film_net(y).chunk(2, dim=1) 
+        gamma = gamma.squeeze(0).squeeze(0)
+        beta = beta.squeeze(0).squeeze(0)
         h = self.fc(z)
+        h = gamma * h + beta
         h = h.view(z.size(0), self.init_channels, self.init_spatial, self.init_spatial)
   
-        y_ds = F.interpolate(y, size=(self.init_spatial, self.init_spatial), mode="bilinear", align_corners=False)
-        h = torch.cat([h, y_ds], dim=1)
-
         h = self.trunk(h)
         x_logits = self.mean_head(h)
         return x_logits

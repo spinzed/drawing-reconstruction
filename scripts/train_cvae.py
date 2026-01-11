@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-from cvae_model_decoderz import CVAE as VAE
+from cvae_model import CVAE as VAE
 from dataset import ImageDataset
 
 # ---------------------------------------------------------------------
