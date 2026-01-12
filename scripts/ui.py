@@ -8,7 +8,9 @@ import numpy as np
 import time
 import os
 import utils
-from generator import VaeGenerator, ConvVaeGenerator
+import generator
+
+binarize = False
 
 def numpy_to_qpixmap(arr: np.ndarray) -> QPixmap:
     if arr.dtype != np.uint8:
@@ -117,18 +119,15 @@ class InteractiveImage(QLabel):
         self.on_release.connect(func)
 
     def registerWhileDown(self, func):
-        def wrapped_func(x, y):
-            return func(x, y, last[0], last[1])
-
         self.hover_while_pressed.connect(func)
 
-""".
-Main. app
+"""
+Main app
 """
 class ImageApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.generator = ConvVaeGenerator()
+        self.generator = generator.CVaeDekoderzGenerator()
         self.setWindowTitle("Generated Image Viewer")
 
         # --- Dropdowns ---
@@ -140,7 +139,7 @@ class ImageApp(QWidget):
         self.weight_options = get_weights_files()
         self.weights_dropdown.addItems(self.weight_options)
         if len(self.weight_options) > 0:
-            self.generator.set_weights(self.weight_options[0])
+            self.on_weight_file_change(self.weight_options[0])
         self.weights_dropdown.currentTextChanged.connect(self.on_weight_file_change)
 
         # --- Image labels ---
@@ -194,7 +193,10 @@ class ImageApp(QWidget):
 
     def on_weight_file_change(self, w):
         print(f"Selected weights: {w}")
-        self.generator.set_weights(w)
+        try:
+            self.generator.set_weights(w)
+        except RuntimeError as e:
+            print("Failed to load weights:", e)
 
     def on_canvas_click(self, x, y, xlast, ylast):
         #print(f"Click ({x}, {y}), ({xlast}, {ylast})")
@@ -214,7 +216,7 @@ class ImageApp(QWidget):
     def generate(self):
         if np.sum(self.canvas) == 0: # canvas is empty, don't attempt to reconstruct
             return
-        generated = self.generator.generate((self.canvas/ 255).astype(np.float32))
+        generated = self.generator.generate((self.canvas / 255).astype(np.float32))
         self.set_generated((generated * 255).astype(np.uint8))
 
 if __name__ == "__main__":

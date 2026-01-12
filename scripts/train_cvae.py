@@ -106,16 +106,16 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             model.train()
 
             for i, (X_imgs, y_, cats) in enumerate(train_loader):
-                optimizer.zero_grad()                
-                
+                optimizer.zero_grad()
+
                 X = X_imgs.to(device, dtype=torch.float32)
                 y_ = y_.to(device, dtype=torch.float32)
                 X = X.unsqueeze(1)
                 y_ = y_.unsqueeze(1)
-                
-                z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(y_, X)
-                L = loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0)
-                
+
+                z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
+                L = loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0)
+
                 L.backward()
                 if config["grad_clip"] is not None:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), config["grad_clip"])
@@ -132,13 +132,12 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
 	  
             img_original = X_imgs[0].cpu().detach().numpy()
-            print(X.shape)
-            
+            print(f"before {y_.shape}")
             img_new = model.sample(X[0].unsqueeze(0))
             img_new = img_new.squeeze(0).squeeze(0)
             img_new = img_new.detach().cpu().numpy()
             img_new_b = binarize(img_new)
-            
+
             if time.time() - t >= 1:
                 t = time.time()
                 try:

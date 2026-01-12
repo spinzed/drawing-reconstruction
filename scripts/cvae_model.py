@@ -55,7 +55,7 @@ class GaussianDecoder(nn.Module):
             nn.LeakyReLU(0.2)
         )
 
-        self.down_block = nn.AvgPool2d(kernel_size=4, 4)
+        self.down_block = nn.AvgPool2d(kernel_size=4, stride=4)
         
         self.film_net = nn.Sequential(
             nn.Linear(self.init_spatial * self.init_spatial, film_hidden),

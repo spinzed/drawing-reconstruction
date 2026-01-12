@@ -1,6 +1,8 @@
 import torch
-from vae_model import VAE
+import vae_model
 import vae_model_classic_bernoulli
+import cvae_model
+import cvae_model_decoderz
 import os
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -14,14 +16,11 @@ def get_y(x, out):
 
 """
 Used by UI to generate an image.
-For now only suuports VAE, but depending how the project goes
-we might have a dropdown in the UI for the model, or the correct
-model will be loaded from the weights file.
 """
 class VaeGenerator():
     def __init__(self):
         self.weights_file = None
-        self.model = VAE(image_size[0] * image_size[1], 800, 400)
+        self.model = vae_model.VAE(image_size[0] * image_size[1], 800, 400)
         self.model = self.model.to(device)
 
     def set_weights(self, path):
@@ -68,3 +67,55 @@ class ConvVaeGenerator():
             out_t = get_y(X, out_probs)
         out = out_t.squeeze(0).squeeze(0).cpu().detach().numpy()
         return out
+
+class CVaeGenerator():
+    def __init__(self):
+        self.weights_file = None
+        self.model = cvae_model.CVAE(image_size[0], 64, device=torch.device(device))
+        self.model = self.model.to(device)
+
+    def set_weights(self, path):
+        if not os.path.isfile(path):
+            raise RuntimeError("weights file doesn't exist")
+
+        state = torch.load(path, map_location=torch.device(device))
+        self.model.load_state_dict(state)
+        self.weights_file = path
+
+    def generate(self, img):
+        if self.weights_file is None:
+            raise RuntimeError("weights must be set first")
+
+        self.model.eval()
+        y = torch.tensor(img, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
+        with torch.no_grad():
+            x_prob = self.model.sample(y)
+        out = x_prob.squeeze(0).squeeze(0).cpu().detach().numpy()
+        return out
+
+class CVaeDekoderzGenerator():
+    def __init__(self):
+        self.weights_file = None
+        self.model = cvae_model_decoderz.CVAE(image_size[0], 128, device=torch.device(device))
+        self.model = self.model.to(device)
+
+    def set_weights(self, path):
+        if not os.path.isfile(path):
+            raise RuntimeError("weights file doesn't exist")
+
+        state = torch.load(path, map_location=torch.device(device))
+        self.model.load_state_dict(state)
+        self.weights_file = path
+
+    def generate(self, img):
+        if self.weights_file is None:
+            raise RuntimeError("weights must be set first")
+
+        self.model.eval()
+        y = torch.tensor(img, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
+        with torch.no_grad():
+            x_prob = self.model.sample(y)
+        out = x_prob.squeeze(0).squeeze(0).cpu().detach().numpy()
+        print(out)
+        return out
+
