@@ -104,8 +104,8 @@ class CVAE(nn.Module):
 
     def sample(self, y):
         mu_p, logvar_p = self.encoder_prior(y)
-        z = reparametrize(mu_p, logvar_p)        
-        
+        #z = reparametrize(mu_p, logvar_p)        
+        z = mu_p
         x_logits = self.decoder(z)
         return torch.sigmoid(x_logits)
 

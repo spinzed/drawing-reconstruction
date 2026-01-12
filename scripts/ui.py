@@ -8,7 +8,10 @@ import numpy as np
 import time
 import os
 import utils
-from generator import VaeGenerator, ConvVaeGenerator
+import generator
+
+binarize = False
+shape = (64, 64)
 
 def numpy_to_qpixmap(arr: np.ndarray) -> QPixmap:
     if arr.dtype != np.uint8:
@@ -69,7 +72,7 @@ class InteractiveImage(QLabel):
         label_w, label_h = self.width(), self.height()
         #pixmap = self.pixmap()
         #pm_w, pm_h = pixmap.width(), pixmap.height()
-        pm_w, pm_h = 256, 256 # TODO: fix properly
+        pm_w, pm_h = shape # TODO: fix properly
 
         scale = min(label_w / pm_w, label_h / pm_h)
         drawn_w = pm_w * scale
@@ -117,18 +120,15 @@ class InteractiveImage(QLabel):
         self.on_release.connect(func)
 
     def registerWhileDown(self, func):
-        def wrapped_func(x, y):
-            return func(x, y, last[0], last[1])
-
         self.hover_while_pressed.connect(func)
 
-""".
-Main. app
+"""
+Main app
 """
 class ImageApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.generator = ConvVaeGenerator()
+        self.generator = generator.CVaeDekoderzGenerator()
         self.setWindowTitle("Generated Image Viewer")
 
         # --- Dropdowns ---
@@ -140,7 +140,7 @@ class ImageApp(QWidget):
         self.weight_options = get_weights_files()
         self.weights_dropdown.addItems(self.weight_options)
         if len(self.weight_options) > 0:
-            self.generator.set_weights(self.weight_options[0])
+            self.on_weight_file_change(self.weight_options[0])
         self.weights_dropdown.currentTextChanged.connect(self.on_weight_file_change)
 
         # --- Image labels ---
@@ -194,7 +194,10 @@ class ImageApp(QWidget):
 
     def on_weight_file_change(self, w):
         print(f"Selected weights: {w}")
-        self.generator.set_weights(w)
+        try:
+            self.generator.set_weights(w)
+        except RuntimeError as e:
+            print("Failed to load weights:", e)
 
     def on_canvas_click(self, x, y, xlast, ylast):
         #print(f"Click ({x}, {y}), ({xlast}, {ylast})")
@@ -206,7 +209,7 @@ class ImageApp(QWidget):
         self.reset_canvas()
     
     def reset_canvas(self):
-        empty = (np.ones((256, 256)) * 255).astype(np.uint8)
+        empty = (np.ones(shape) * 255).astype(np.uint8)
         self.canvas = empty
         self.set_canvas(self.canvas)
         self.set_generated(empty)
@@ -214,7 +217,7 @@ class ImageApp(QWidget):
     def generate(self):
         if np.sum(self.canvas) == 0: # canvas is empty, don't attempt to reconstruct
             return
-        generated = self.generator.generate((self.canvas/ 255).astype(np.float32))
+        generated = self.generator.generate((self.canvas / 255).astype(np.float32))
         self.set_generated((generated * 255).astype(np.uint8))
 
 if __name__ == "__main__":

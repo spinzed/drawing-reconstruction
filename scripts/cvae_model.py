@@ -54,6 +54,9 @@ class GaussianDecoder(nn.Module):
             nn.Linear(latent_dim, self.init_channels * self.init_spatial * self.init_spatial),
             nn.LeakyReLU(0.2)
         )
+
+        self.down_block = nn.AvgPool2d(kernel_size=4, stride=4)
+        
         self.film_net = nn.Sequential(
             # 256 → 128
             nn.Conv2d(
@@ -146,8 +149,8 @@ class CVAE(nn.Module):
     @staticmethod
     def loss(x, y, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0):
         """CVAE ELBO loss"""
-        recon_loss = F.binary_cross_entropy_with_logits(x_logits, x, reduction='none')
-        recon_loss = recon_loss.flatten(1).mean(1)  
+        dist = ContinuousBernoulli(logits=x_logits)
+        recon_loss = -dist.log_prob(x).flatten(1).mean(1)  
 
         q_dist = Normal(mu_q, torch.exp(0.5 * logvar_q))
         p_dist = Normal(mu_p, torch.exp(0.5 * logvar_p))

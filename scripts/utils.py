@@ -56,6 +56,9 @@ def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None):
     if img is None:
         img = np.ones(shape)
 
+    scale_x = shape[1] / 256
+    scale_y = shape[0] / 256
+
     # draw each stroke
     for stroke_ind in range(start, end if end is not None else len(strokes)):
         stroke = strokes[stroke_ind]
@@ -65,17 +68,21 @@ def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None):
         final_xs = []
         final_ys = []
 
-        current_x = xs[0]
-        current_y = ys[0]
+        current_x = int(xs[0] * scale_y)
+        current_y = int(ys[0] * scale_x)
 
         # each stroke is composed of multiple registered key points, interpolate between each one of them
         for i in range(1, len(xs)):
-            out_xs, out_ys = lerp(current_x, current_y, xs[i], ys[i])
+            xs_i = int(scale_x * xs[i])
+            ys_i = int(scale_y * ys[i])
+            out_xs, out_ys = lerp(current_x, current_y, xs_i, ys_i)
             final_xs += out_xs
             final_ys += out_ys
-            current_x = xs[i]
-            current_y = ys[i]
+            current_x = xs_i
+            current_y = ys_i
 
+        #final_ys = [int(round(y * shape[0] / 256)) for y in final_ys]
+        #final_xs = [int(round(x * shape[0] / 256)) for x in final_xs]
         img[final_ys, final_xs] = 0
     return img
 

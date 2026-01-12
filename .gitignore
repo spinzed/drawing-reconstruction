@@ -3,3 +3,4 @@ env.sh
 *.ndjson
 *.pth
 venv
+checkpoints

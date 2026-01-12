@@ -6,7 +6,7 @@ import os
 import utils as ut
 import cv2
 
-def erode_image(img, kernel_size=3, iterations=3):
+def erode_image(img, kernel_size=3, iterations=1):
     kernel = np.ones((kernel_size, kernel_size), np.uint8)
     img = img.astype(np.uint8)
     return cv2.erode(img, kernel, iterations=iterations)

@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-from cvae_model import CVAE as VAE
+from cvae_model_decoderz import CVAE as VAE
 from dataset import ImageDataset
 
 # ---------------------------------------------------------------------
@@ -13,22 +13,23 @@ from dataset import ImageDataset
 # ---------------------------------------------------------------------
 
 dataset_dir = "quickdraw"
-batch_size = 32
+batch_size = 64
 device = "cuda" if torch.cuda.is_available() else "cpu"
-image_limit = 1000
-image_size = (256, 256)
+image_limit = 10000
+image_size = (64, 64)
 binarization_threshold = 0.55
 model_weights_save_path = "ice_weights.pth"
 #item = "cat"
 item = "ice cream"
 model_residual = False
-latent_dim  = 128
+latent_dim  = 256
+checkpointing = True
 
 config = {
     "epochs": 100,
-    "lr": 1e-3,
-    "weight_decay": 1e-9,
-    "grad_clip": 10,
+    "lr": 1e-4,
+    "weight_decay": 1e-8,
+    "grad_clip": 0.01,
     "loss": VAE.loss
     #"loss": nn.L1Loss(),
 }
@@ -72,12 +73,12 @@ def visualize(axarr, images, titles):
         im = axarr[i].imshow(image, cmap="Greys_r")
         axarr[i].set_title(titles[i])
 
-def binarize(img):
+def binarize(img, binarization_threshold=binarization_threshold):
     binary = np.ones_like(img, dtype=np.float32)
     binary[img < binarization_threshold] = 0
     return binary
 
-def save_model(model):
+def save_model(model, model_weights_save_path=model_weights_save_path):
     torch.save(model.state_dict(), model_weights_save_path)
     print(f"Model weights saved to {model_weights_save_path}")
 
@@ -99,22 +100,17 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
     f, axarr = plt.subplots(1, n_graphs, figsize=(3 * n_graphs, 4))
     t = time.time()
     loss = config["loss"]
-    betas = np.linspace(0, 1, 5)
-    beta = 0
+    #betas = np.linspace(0, 1, 5)
+    #beta = 0
 
     try:
         for epoch in range(epochs):
             print(f"Epoch {epoch+1}/{epochs}")
             model.train()
 
-            if epoch < 5:
-                beta = betas[epoch]
-            else:
-                beta = 1
-
             for i, (X_imgs, y_, cats) in enumerate(train_loader):
-                optimizer.zero_grad()                
-                
+                optimizer.zero_grad()
+
                 X = X_imgs.to(device, dtype=torch.float32)
                 y_ = y_.to(device, dtype=torch.float32)
                 X = X.unsqueeze(1)
@@ -122,7 +118,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 
                 z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(y_, X)
                 
-                L = loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=beta)
+                L = loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=0.1S)
                 
                 L.backward()
                 if config["grad_clip"] is not None:
@@ -137,16 +133,29 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             Ls_train.append(L_train)
             Ls_val.append(L_val)
 
+
+
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
 	  
             img_original = X_imgs[0].cpu().detach().numpy()
-            print(X.shape)
-            
+            print(f"before {y_.shape}")
+
             img_new = model.sample(X[0].unsqueeze(0))
             img_new = img_new.squeeze(0).squeeze(0)
             img_new = img_new.detach().cpu().numpy()
             img_new_b = binarize(img_new)
-            
+
+            X_val_imgs, y_, _ = next(iter(val_loader))
+            X_val = X_val_imgs[0]
+            X_val = X_val.to(X.device)
+            X_val = X_val.to(X.dtype)
+            print(X_val.shape)
+
+            img_val = model.sample(X_val.unsqueeze(0).unsqueeze(0))
+            img_val_original = X_val.squeeze(0)
+            img_val = img_val.squeeze(0).squeeze(0)
+            img_val_reconstructed = img_val.detach().cpu().numpy()
+            img_val_original = img_val_original.detach().cpu().numpy()
             if time.time() - t >= 1:
                 t = time.time()
                 try:
@@ -155,12 +164,18 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                     pass
                 visualize(
                     axarr,
-                    [img_original, img_new, img_new_b],
-                    ["Partial", "New", "New Binarized"]
+                    [img_original, img_new, img_val_original, img_val_reconstructed],
+                    ["Partial", "Training Reconstructed", "Validation Partial", "Validation Reconstruction"]
                 )
                 plt.pause(0.01)
                 print(f"Max: {np.max(img_new)}")
                 print(f"Min: {np.min(img_new)}")
+
+            if epoch % 5 == 0 and checkpointing:
+                save_model(model, f"checkpoint_{model_weights_save_path}_{epoch}")
+
+
+        
     except KeyboardInterrupt:
         print("Early stop")
 
