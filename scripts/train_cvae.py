@@ -99,11 +99,18 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
     f, axarr = plt.subplots(1, n_graphs, figsize=(3 * n_graphs, 4))
     t = time.time()
     loss = config["loss"]
+    betas = np.linspace(0, 1, 5)
+    beta = 0
 
     try:
         for epoch in range(epochs):
             print(f"Epoch {epoch+1}/{epochs}")
             model.train()
+
+            if epoch < 5:
+                beta = betas[epoch]
+            else:
+                beta = 1
 
             for i, (X_imgs, y_, cats) in enumerate(train_loader):
                 optimizer.zero_grad()                
@@ -114,7 +121,8 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 y_ = y_.unsqueeze(1)
                 
                 z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(y_, X)
-                L = loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0)
+                
+                L = loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=beta)
                 
                 L.backward()
                 if config["grad_clip"] is not None:

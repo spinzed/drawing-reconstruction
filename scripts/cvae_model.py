@@ -45,7 +45,7 @@ class GaussianEncoder(nn.Module):
 
 class GaussianDecoder(nn.Module):
     """Decoder modeling p(x|z,y)"""
-    def __init__(self, latent_dim, input_dim):
+    def __init__(self, latent_dim, input_dim, film_hidden_dim = 128):
         super().__init__()
         self.init_channels = 128
         self.init_spatial = input_dim // 4  # match encoder downsampling
@@ -55,14 +55,38 @@ class GaussianDecoder(nn.Module):
             nn.LeakyReLU(0.2)
         )
         self.film_net = nn.Sequential(
-            nn.Linear(input_dim**2, self.init_spatial),
+            # 256 → 128
+            nn.Conv2d(
+                in_channels=1,               # or y_channels
+                out_channels=film_hidden_dim,
+                kernel_size=4,
+                stride=2,
+                padding=1
+            ),
             nn.ReLU(),
-            nn.Linear(self.init_spatial, 2*latent_dim)  
-        )   
+
+            # 128 → 64
+            nn.Conv2d(
+                film_hidden_dim,
+                film_hidden_dim,
+                kernel_size=4,
+                stride=2,
+                padding=1
+            ),
+            nn.ReLU(),
+
+            # produce gamma + beta
+            nn.Conv2d(
+                film_hidden_dim,
+                2 * self.init_channels,
+                kernel_size=3,
+                padding=1
+            )
+        )
 
         # Conv decoder
         self.trunk = nn.Sequential(
-            nn.ConvTranspose2d(self.init_channels + 1, 64, 4, stride=2, padding=1),
+            nn.ConvTranspose2d(self.init_channels, 64, 4, stride=2, padding=1),
             nn.LeakyReLU(0.2),
             nn.Conv2d(64, 64, 3, padding=1),
             nn.LeakyReLU(0.2),
@@ -72,18 +96,20 @@ class GaussianDecoder(nn.Module):
             nn.Conv2d(32, 32, 3, padding=1),
             nn.LeakyReLU(0.2),
         )
-
         self.mean_head = nn.Conv2d(32, 1, 3, padding=1)  # output logits for Bernoulli
 
     def forward(self, z, y):
-        y = torch.flatten(y, start_dim=1)
-        gamma, beta = self.film_net(y).chunk(2, dim=1) 
-        gamma = gamma.squeeze(0).squeeze(0)
-        beta = beta.squeeze(0).squeeze(0)
+        gamma, beta = self.film_net(y).chunk(2, dim=1)
         h = self.fc(z)
-        h = gamma * h + beta
         h = h.view(z.size(0), self.init_channels, self.init_spatial, self.init_spatial)
-  
+        h = torch.mul(h, gamma) + beta
+        #print(gamma.shape)
+        #h = h.view(z.size(0), self.init_channels, self.init_spatial* self.init_spatial)
+        #print(h.shape)
+
+        #print(h.shape)
+
+
         h = self.trunk(h)
         x_logits = self.mean_head(h)
         return x_logits
