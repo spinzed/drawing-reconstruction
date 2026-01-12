@@ -3,4 +3,4 @@ numpy
 matplotlib
 opencv-python
 torchvision
-PySidce6
+PySide6
