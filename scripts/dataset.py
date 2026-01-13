@@ -46,3 +46,54 @@ class ImageDataset(Dataset):
         y = erode_image(y)
         x = erode_image(x)
         return torch.tensor(x), torch.tensor(y), word
+
+class NumpyDataset(Dataset):
+    """Dataset wrapper for numpy arrays of sketch sequences.
+
+    Expected input is an array-like where each element is a sequence of shape
+    (T, >=3) with columns: dx, dy, pen_flag (or similar). A typical input is
+    np.load("file.npz", encoding='latin1', allow_pickle=True)["train"].
+
+    The dataset filters out too short/long sequences, clamps extreme values,
+    converts to float32 and normalizes dx/dy by the global standard deviation.
+    __getitem__ returns a tuple: (torch.tensor(sequence), length).
+    """
+
+    def __init__(self, arr, max_seq_length=200):
+        super().__init__()
+        # ensure we can iterate over arr even if it's an ndarray of objects
+        sequences = [np.array(s, dtype=np.float32) for s in list(arr)]
+        # filter and clamp
+        filtered = []
+        for seq in sequences:
+            if seq.ndim != 2 or seq.shape[1] < 2:
+                # not a valid sequence, skip
+                continue
+            if seq.shape[0] <= max_seq_length and seq.shape[0] > 10:
+                seq = np.minimum(seq, 1000)
+                seq = np.maximum(seq, -1000)
+                filtered.append(seq.astype(np.float32))
+        if len(filtered) == 0:
+            raise ValueError("NumpyDataset: no valid sequences found after filtering")
+        # normalize dx,dy by global std (append all dx/dy values)
+        vals = []
+        for s in filtered:
+            vals.append(s[:, 0])
+            vals.append(s[:, 1])
+        vals = np.concatenate(vals)
+        scale = np.std(vals)
+        if scale == 0 or np.isnan(scale):
+            scale = 1.0
+        for i in range(len(filtered)):
+            s = filtered[i].copy()
+            s[:, 0:2] /= scale
+            filtered[i] = s
+        self.data = filtered
+        self.max_seq_length = max_seq_length
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        seq = self.data[idx]
+        return torch.from_numpy(seq), seq.shape[0]

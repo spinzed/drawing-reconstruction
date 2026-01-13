@@ -54,6 +54,7 @@ def get_weights_files():
 Helper class for images.
 """
 class InteractiveImage(QLabel):
+    on_mousedown = Signal(int, int)
     hover_while_pressed = Signal(int, int, int, int)
     on_release = Signal()
 
@@ -94,6 +95,7 @@ class InteractiveImage(QLabel):
             pos = self._map_to_image(event)
             if pos:
                 self.pressed = True
+                self.on_mousedown.emit(pos[0], pos[1])
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -116,6 +118,9 @@ class InteractiveImage(QLabel):
         self.last_coords = (x, y)
         self.hover_while_pressed.emit(x, y, last[0], last[1])
 
+    def registerOnMousedown(self, func):
+        self.on_mousedown.connect(func)
+
     def registerOnMouseup(self, func):
         self.on_release.connect(func)
 
@@ -128,7 +133,7 @@ Main app
 class ImageApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.generator = generator.CVaeDekoderzGenerator()
+        self.generator = generator.SketchRNNGenerator()
         self.setWindowTitle("Generated Image Viewer")
 
         # --- Dropdowns ---
@@ -145,7 +150,8 @@ class ImageApp(QWidget):
 
         # --- Image labels ---
         self.image1 = InteractiveImage()
-        self.image1.registerWhileDown(self.on_canvas_click)
+        self.image1.registerOnMousedown(self.on_canvas_mousedown)
+        self.image1.registerWhileDown(self.on_canvas_mousemove)
         self.image1.registerOnMouseup(self.generate)
 
         self.image2 = QLabel()
@@ -199,25 +205,30 @@ class ImageApp(QWidget):
         except RuntimeError as e:
             print("Failed to load weights:", e)
 
-    def on_canvas_click(self, x, y, xlast, ylast):
-        #print(f"Click ({x}, {y}), ({xlast}, {ylast})")
+    def on_canvas_mousedown(self, x, y):
+        self.strokes.append([[x], [y]])
+
+    def on_canvas_mousemove(self, x, y, xlast, ylast):
         xs, ys = utils.lerp(xlast, ylast, x, y)
         self.canvas[ys, xs] = 0
         self.set_canvas(self.canvas)
+        self.strokes[-1][0].append(x)
+        self.strokes[-1][1].append(y)
 
     def on_reset(self):
         self.reset_canvas()
-    
+
     def reset_canvas(self):
         empty = (np.ones(shape) * 255).astype(np.uint8)
         self.canvas = empty
+        self.strokes = []
         self.set_canvas(self.canvas)
         self.set_generated(empty)
 
     def generate(self):
         if np.sum(self.canvas) == 0: # canvas is empty, don't attempt to reconstruct
             return
-        generated = self.generator.generate((self.canvas / 255).astype(np.float32))
+        generated = self.generator.generate((self.canvas / 255).astype(np.float32), self.strokes)
         self.set_generated((generated * 255).astype(np.uint8))
 
 if __name__ == "__main__":

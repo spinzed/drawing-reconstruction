@@ -3,9 +3,9 @@ import vae_model
 import vae_model_classic_bernoulli
 import cvae_model
 import cvae_model_decoderz
+import sketch_rnn_model
 import os
-from dataset import erode_image
-from train_cvae import binarize
+import utils as ut
 import numpy as np
 
 binarization_threshold = 0.5
@@ -35,7 +35,7 @@ class VaeGenerator():
         self.model.load_state_dict(torch.load(path, weights_only=True))
         self.weights_file = path
 
-    def generate(self, img):
+    def generate(self, img, strokes):
         if self.weights_file is None:
             raise RuntimeError("weights must be set first")
 
@@ -59,7 +59,7 @@ class ConvVaeGenerator():
         self.model.load_state_dict(state)
         self.weights_file = path
 
-    def generate(self, img):
+    def generate(self, img, strokes):
         if self.weights_file is None:
             raise RuntimeError("weights must be set first")
 
@@ -87,7 +87,7 @@ class CVaeGenerator():
         self.model.load_state_dict(state)
         self.weights_file = path
 
-    def generate(self, img):
+    def generate(self, img, strokes):
         if self.weights_file is None:
             raise RuntimeError("weights must be set first")
 
@@ -112,8 +112,7 @@ class CVaeDekoderzGenerator():
         self.model.load_state_dict(state)
         self.weights_file = path
 
-    def generate(self, img):
-        #img = erode_image(img)
+    def generate(self, img, strokes):
         if self.weights_file is None:
             raise RuntimeError("weights must be set first")
 
@@ -122,9 +121,32 @@ class CVaeDekoderzGenerator():
         with torch.no_grad():
             x_prob = self.model.sample(y)
         out = x_prob.squeeze(0).squeeze(0).cpu().detach().numpy()
-        print(out)
-        print(f"min: {np.min(out)}")
-        print(f"ax: {np.max(out)}")
-        out = binarize(out, binarization_threshold)
         return out
 
+class SketchRNNGenerator():
+    def __init__(self):
+        self.weights_file = None
+        self.model = sketch_rnn_model.SketchRNN()
+        #self.model = self.model.to(device)
+
+    def set_weights(self, path):
+        if not os.path.isfile(path):
+            raise RuntimeError("weights file doesn't exist")
+
+        self.model.load(path)
+        self.model.encoder.to(device)
+        self.model.decoder.to(device)
+        self.weights_file = path
+
+    def generate(self, img, strokes):
+        if self.weights_file is None:
+            raise RuntimeError("weights must be set first")
+
+        self.model.encoder.eval()
+        self.model.decoder.eval()
+        in_sequence = np.array(ut.strokes_to_sequence(strokes))
+        with torch.no_grad():
+            out_sequence = self.model.sample(in_sequence)
+        out_sequence_scaled = ut.scale_sequence_to_size(out_sequence, size=image_size[0])
+        img = ut.compile_img_from_sequence(out_sequence_scaled, relative_offsets=False, img_shape=image_size)
+        return img

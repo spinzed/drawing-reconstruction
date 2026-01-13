@@ -86,6 +86,69 @@ def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None):
         img[final_ys, final_xs] = 0
     return img
 
+"""
+Sequence is an array-like of shape (seq_length, [dx, dy, stroke_end(bool)])
+"""
+def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 256)):
+    img = np.ones(img_shape)
+    print(sequence)
+
+    x, y = sequence[0, 1], sequence[0, 0]
+    #color = np.random.uniform(size=3)
+    last = False
+    for i in range(1, len(sequence)):
+        entry = sequence[i]
+        if relative_offsets:
+            x2 = x + entry[1]
+            y2 = y + entry[0]
+        else:
+            x2 = entry[1]
+            y2 = entry[0]
+
+        if not last:
+            xs, ys = lerp(x, y, x2, y2)
+            xs = np.clip(xs, 0, img_shape[1]-1)
+            ys = np.clip(ys, 0, img_shape[0]-1)
+            img[xs, ys] = 0
+        last = False
+
+        if entry[2] == 1:
+            xs, ys = 0, 0
+            last = True
+
+        if relative_offsets:
+            x += entry[1]
+            y += entry[0]
+        else:
+            x = entry[1]
+            y = entry[0]
+
+    return img
+
+def strokes_to_sequence(strokes):
+    sequence = []
+    for stroke in strokes:
+        xs = stroke[0]
+        ys = stroke[1]
+        for i in range(len(xs)):
+            if i == 0:
+                sequence.append([ys[i], xs[i], 0])
+            else:
+                sequence.append([ys[i] - ys[i-1], xs[i] - xs[i-1], 0])
+            sequence[-1][2] = 1
+        sequence[-1][2] = 0
+    return np.array(sequence)
+
+def scale_sequence_to_size(sequence, size=256):
+    smin = np.min(np.abs(sequence[:, 0:2]))
+    smax = np.max(np.abs(sequence[:, 0:2]))
+
+    s2 = sequence
+    s2[:, 0:2] = ((s2[:, 0:2])/(smax-smin)) * size//2 + size//2
+    s2 = s2.astype(np.int32)
+
+    return s2
+
 # for debugging
 class CompileTest:
     def __init__(self):

@@ -91,7 +91,7 @@ class CVAE(nn.Module):
 
     def forward(self, x, y):
         mu_p, logvar_p = self.encoder_prior(y)
-        
+
         xy = torch.cat([x, y], dim=1)
         mu_q, logvar_q = self.encoder_post(xy)
 
