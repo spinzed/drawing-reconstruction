@@ -12,6 +12,7 @@ import loader
 
 binarize = False
 img_shape = (256, 256)
+weights_dir = "weights"
 
 def numpy_to_qpixmap(arr: np.ndarray) -> QPixmap:
     if arr.dtype != np.uint8:
@@ -38,13 +39,21 @@ def numpy_to_qpixmap(arr: np.ndarray) -> QPixmap:
 
 # returns dict category: file path
 def get_categories():
+    if not os.path.isdir("quickdraw"):
+        print("Category folder 'quickdraw' not found")
+        return []
+
     files = os.listdir("quickdraw")
     ext = "ndjson"
     categories = {file.split("." + ext)[0]: file for file in files if file.endswith(ext)}
     return categories
 
-def get_weights_files():
-    files = os.listdir(".")
+def get_weight_files():
+    if not os.path.isdir(weights_dir):
+        print(f"Weights folder '{weights_dir}' not found")
+        return []
+
+    files = os.listdir(weights_dir)
     ext = "pth"
     weight_files = [file for file in files if file.endswith(ext)]
     return weight_files
@@ -144,7 +153,7 @@ class ImageApp(QWidget):
         self.cat_dropdown = QComboBox()
         self.cat_dropdown.currentTextChanged.connect(self.on_category_change)
 
-        self.weight_options = get_weights_files()
+        self.weight_options = get_weight_files()
         self.weights_dropdown.addItems(self.weight_options)
         self.weights_dropdown.setCurrentIndex(-1)
         self.weights_dropdown.currentTextChanged.connect(self.on_weight_file_change)
@@ -188,7 +197,7 @@ class ImageApp(QWidget):
         self.info_area = QTextEdit()
         self.info_area.setReadOnly(True)
         self.info_area.setPlainText(
-            "Info:\n- Draw on the left canvas using the mouse.\n- Click 'Redraw' to generate a reconstruction.\n- Click 'Reset' to clear the canvas.\n- Load weights via the dropdown to enable a generator."
+            "Info:\n- Draw on the left canvas using the mouse.\n- Click 'Redraw' to regenerate a reconstruction.\n- Click 'Reset' to clear the canvas.\n- Load weights via the dropdown to enable a generator."
         )
         self.info_area.setFixedHeight(120)
         self.info_area.setStyleSheet("background: #f5f5f5;")
@@ -204,7 +213,8 @@ class ImageApp(QWidget):
         print(f"Selected category: {cat}")
         self.category = cat
 
-    def on_weight_file_change(self, file):
+    def on_weight_file_change(self, filename):
+        file = os.path.join(weights_dir, filename)
         msg = f"Trying to load weights: {file}"
         print(msg)
         self.set_info(msg)

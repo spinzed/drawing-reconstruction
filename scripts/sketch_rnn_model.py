@@ -310,12 +310,9 @@ class SketchRNN():
         return hp.wKL*self.eta_step * torch.max(LKL,KL_min)
 
     def save(self, epoch=None, filename=None):
-        """Save a single checkpoint containing encoder+decoder (and opt states).
-
-        If filename is None, a name is generated. Optionally include `epoch`.
-        """
         if filename is None:
-            filename = "weights_sketchrnn.pth"
+            filename = "weights/weights_sketchrnn.pth"
+
         checkpoint = {
             "model_type": "SketchRNN",
             "supported_classes": [class_name],
