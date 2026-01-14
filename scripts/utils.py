@@ -89,9 +89,9 @@ def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None):
 """
 Sequence is an array-like of shape (seq_length, [dx, dy, stroke_end(bool)])
 """
-def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 256)):
-    img = np.ones(img_shape)
-    print(sequence)
+def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 256), img=None):
+    if img is None:
+        img = np.ones(img_shape)
 
     x, y = sequence[0, 1], sequence[0, 0]
     #color = np.random.uniform(size=3)
@@ -125,25 +125,29 @@ def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 2
 
     return img
 
-def strokes_to_sequence(strokes):
+def strokes_to_relative_sequence(strokes):
     sequence = []
+    lasty, lastx = 0, 0
     for stroke in strokes:
         xs = stroke[0]
         ys = stroke[1]
+
         for i in range(len(xs)):
-            if i == 0:
-                sequence.append([ys[i], xs[i], 0])
+            if lasty is None or lastx is None:
+                sequence.append([xs[i], ys[i], 0])
             else:
-                sequence.append([ys[i] - ys[i-1], xs[i] - xs[i-1], 0])
-            sequence[-1][2] = 1
-        sequence[-1][2] = 0
+                sequence.append([xs[i] - lastx, ys[i] - lasty, 0])
+            lasty, lastx = ys[i], xs[i]
+            sequence[-1][2] = 0
+
+        sequence[-1][2] = 1
     return np.array(sequence)
 
 def scale_sequence_to_size(sequence, size=256):
     smin = np.min(np.abs(sequence[:, 0:2]))
     smax = np.max(np.abs(sequence[:, 0:2]))
 
-    s2 = sequence
+    s2 = sequence.copy()
     s2[:, 0:2] = ((s2[:, 0:2])/(smax-smin)) * size//2 + size//2
     s2 = s2.astype(np.int32)
 

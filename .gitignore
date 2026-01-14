@@ -2,5 +2,7 @@ __pycache__
 env.sh
 *.ndjson
 *.pth
+*.npz
 venv
 checkpoints
+output

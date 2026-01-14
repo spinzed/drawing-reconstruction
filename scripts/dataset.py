@@ -1,6 +1,5 @@
 import torch
 from torch.utils.data import Dataset
-from torchvision.transforms import functional as TF
 import numpy as np
 import os
 import utils as ut

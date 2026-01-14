@@ -1,6 +1,6 @@
 import sys
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton
+    QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QTextEdit
 )
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt, Signal
@@ -8,10 +8,10 @@ import numpy as np
 import time
 import os
 import utils
-import generator
+import loader
 
 binarize = False
-shape = (64, 64)
+img_shape = (256, 256)
 
 def numpy_to_qpixmap(arr: np.ndarray) -> QPixmap:
     if arr.dtype != np.uint8:
@@ -73,7 +73,7 @@ class InteractiveImage(QLabel):
         label_w, label_h = self.width(), self.height()
         #pixmap = self.pixmap()
         #pm_w, pm_h = pixmap.width(), pixmap.height()
-        pm_w, pm_h = shape # TODO: fix properly
+        pm_w, pm_h = img_shape # TODO: fix properly
 
         scale = min(label_w / pm_w, label_h / pm_h)
         drawn_w = pm_w * scale
@@ -133,19 +133,20 @@ Main app
 class ImageApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.generator = generator.SketchRNNGenerator()
+        self.loader = loader.Loader(img_shape)
+        self.generator = None
+        self.category = None
         self.setWindowTitle("Generated Image Viewer")
 
         # --- Dropdowns ---
+        self.weights_dropdown = QComboBox()
+
         self.cat_dropdown = QComboBox()
-        self.cat_dropdown.addItems(get_categories())
         self.cat_dropdown.currentTextChanged.connect(self.on_category_change)
 
-        self.weights_dropdown = QComboBox()
         self.weight_options = get_weights_files()
         self.weights_dropdown.addItems(self.weight_options)
-        if len(self.weight_options) > 0:
-            self.on_weight_file_change(self.weight_options[0])
+        self.weights_dropdown.setCurrentIndex(-1)
         self.weights_dropdown.currentTextChanged.connect(self.on_weight_file_change)
 
         # --- Image labels ---
@@ -164,24 +165,81 @@ class ImageApp(QWidget):
         self.reset_canvas()
 
         # --- Buttons ---
+        self.redraw_button = QPushButton(text="Redraw")
+        self.redraw_button.clicked.connect(self.on_redraw)
+
         self.reset_button = QPushButton(text="Reset")
         self.reset_button.clicked.connect(self.on_reset)
 
         # --- Layouts ---
         dropdowns_layout = QHBoxLayout()
-        dropdowns_layout.addWidget(self.cat_dropdown)
         dropdowns_layout.addWidget(self.weights_dropdown)
+        dropdowns_layout.addWidget(self.cat_dropdown)
 
         images_layout = QHBoxLayout()
         images_layout.addWidget(self.image1)
         images_layout.addWidget(self.image2)
 
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(self.redraw_button)
+        buttons_layout.addWidget(self.reset_button)
+
+        # info area below the buttons (static info/help text)
+        self.info_area = QTextEdit()
+        self.info_area.setReadOnly(True)
+        self.info_area.setPlainText(
+            "Info:\n- Draw on the left canvas using the mouse.\n- Click 'Redraw' to generate a reconstruction.\n- Click 'Reset' to clear the canvas.\n- Load weights via the dropdown to enable a generator."
+        )
+        self.info_area.setFixedHeight(120)
+        self.info_area.setStyleSheet("background: #f5f5f5;")
+
         main_layout = QVBoxLayout(self)
         main_layout.addLayout(dropdowns_layout)
         main_layout.addLayout(images_layout)
-        main_layout.addWidget(self.reset_button)
+        main_layout.addLayout(buttons_layout)
+        main_layout.addWidget(self.info_area)
 
     # --- Handlers ---
+    def on_category_change(self, cat):
+        print(f"Selected category: {cat}")
+        self.category = cat
+
+    def on_weight_file_change(self, file):
+        msg = f"Trying to load weights: {file}"
+        print(msg)
+        self.set_info(msg)
+        try:
+            self.generator = self.loader.load_from_checkpoint(file)
+        except RuntimeError as e:
+            err = f"Failed to load weights: {e}"
+            print(err)
+            self.set_info(err)
+            return
+        print(f"Weights successfuly set: {file}")
+        params = "\n".join([f"    - {k}: {v}" for k, v in self.generator.additional_params().items()])
+        self.set_info(f"Model: {self.generator.model_type}\nSupported categories: {', '.join(self.generator.supported_classes)}\nModel params:\n{params}")
+
+        self.cat_dropdown.clear()
+        self.cat_dropdown.addItems(self.generator.supported_classes)
+        self.cat_dropdown.setCurrentIndex(0)
+
+    def on_canvas_mousedown(self, x, y):
+        self.strokes.append([[x], [y]])
+
+    def on_canvas_mousemove(self, x, y, xlast, ylast):
+        xs, ys = utils.lerp(xlast, ylast, x, y)
+        self.canvas[ys, xs] = 0
+        self.set_canvas(self.canvas)
+        self.strokes[-1][0].append(x)
+        self.strokes[-1][1].append(y)
+
+    def on_redraw(self):
+        self.generate()
+
+    def on_reset(self):
+        self.reset_canvas()
+
+    # --- Setters ---
     def set_canvas(self, img: np.ndarray):
         pixmap = numpy_to_qpixmap(img)
         self.image1.setPixmap(pixmap.scaled(
@@ -194,41 +252,30 @@ class ImageApp(QWidget):
             300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation
         ))
 
-    # does nothing as of now
-    def on_category_change(self, cat):
-        print(f"Selected cat: {cat}")
-
-    def on_weight_file_change(self, w):
-        print(f"Selected weights: {w}")
+    def set_info(self, text: str):
         try:
-            self.generator.set_weights(w)
-        except RuntimeError as e:
-            print("Failed to load weights:", e)
+            self.info_area.setPlainText(text)
+        except Exception:
+            print(text)
 
-    def on_canvas_mousedown(self, x, y):
-        self.strokes.append([[x], [y]])
-
-    def on_canvas_mousemove(self, x, y, xlast, ylast):
-        xs, ys = utils.lerp(xlast, ylast, x, y)
-        self.canvas[ys, xs] = 0
-        self.set_canvas(self.canvas)
-        self.strokes[-1][0].append(x)
-        self.strokes[-1][1].append(y)
-
-    def on_reset(self):
-        self.reset_canvas()
-
+    # --- Actions ---
     def reset_canvas(self):
-        empty = (np.ones(shape) * 255).astype(np.uint8)
+        empty = (np.ones(img_shape) * 255).astype(np.uint8)
         self.canvas = empty
         self.strokes = []
         self.set_canvas(self.canvas)
         self.set_generated(empty)
 
     def generate(self):
-        if np.sum(self.canvas) == 0: # canvas is empty, don't attempt to reconstruct
+        if len(self.strokes) == 0:
+            print("Canvas empty, skipping generation")
             return
-        generated = self.generator.generate((self.canvas / 255).astype(np.float32), self.strokes)
+        if self.generator is None:
+            print("No valid generator loaded")
+            return
+
+        float_img = (self.canvas / 255).astype(np.float32)
+        generated = self.generator.generate(float_img, self.strokes)
         self.set_generated((generated * 255).astype(np.uint8))
 
 if __name__ == "__main__":
