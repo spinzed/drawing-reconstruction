@@ -15,7 +15,7 @@ from data.dataset import ImageDataset
 dataset_dir = "quickdraw"
 batch_size = 64
 device = "cuda" if torch.cuda.is_available() else "cpu"
-image_limit = 10000
+image_limit = 64
 image_size = (64, 64)
 binarization_threshold = 0.55
 model_weights_save_path = "ice_weights.pth"
@@ -55,7 +55,7 @@ def eval_loss(loader, loss):
             X = X.unsqueeze(1)
             y_ = y_.unsqueeze(1)
             y_ = y_.to(device, dtype=torch.float32)
-            z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(y_, X)
+            z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
             batch_size = X.size(0)
             L_total += loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0).item() * batch_size
             total_samples += batch_size
@@ -136,8 +136,10 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 
 
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
-	  
-            img_partial = y_[0].cpu().detach().numpy()
+            img_train_partial = y_[0]
+            img_train_partial = img_train_partial.squeeze(0)
+            img_train_partial = img_train_partial.cpu().detach().numpy()
+            print(f"img train partial: {img_train_partial.shape}")
 
             img_train_reconstructed = model.sample(y_[0].unsqueeze(0))
             img_train_reconstructed = img_train_reconstructed.squeeze(0).squeeze(0)
@@ -149,12 +151,13 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             y_val = y_val.to(X.device)
             y_val = y_val.to(X.dtype)
 
+
             img_val_reconstructed = model.sample(y_val.unsqueeze(0).unsqueeze(0))
-            img_val_partial = img_val_partial.squeeze(0)
-            img_val_partial = img_val_partial.squeeze(0).squeeze(0)
+            img_val_partial = y_val.squeeze(0)
+            img_val_reconstructed = img_val_reconstructed.squeeze(0).squeeze(0)
             img_val_reconstructed = img_val_reconstructed.detach().cpu().numpy()
             img_val_partial = img_val_partial.detach().cpu().numpy()
-            
+
             if time.time() - t >= 1:
                 t = time.time()
                 try:
@@ -163,15 +166,15 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                     pass
                 visualize(
                     axarr,
-                    [img_train_partial, img_train_recontructed, img_val_partial, img_val_reconstructed],
+                    [img_train_partial, img_train_reconstructed, img_val_partial, img_val_reconstructed],
                     ["Partial", "Training Reconstructed", "Validation Partial", "Validation Reconstruction"]
                 )
                 plt.pause(0.01)
-                print(f"Max: {np.max(img_new)}")
-                print(f"Min: {np.min(img_new)}")
+                print(f"Max pixel: {np.max(img_val_reconstructed)}")
+                print(f"Min pixel: {np.min(img_val_reconstructed)}")
 
             if epoch % 5 == 0 and checkpointing:
-                save_model(model, f"checkpoint_{model_weights_save_path}_{epoch}")
+                save_model(model, f"checkpoint_epoch_{epoch}_{model_weights_save_path}")
 
 
         
