@@ -116,7 +116,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 X = X.unsqueeze(1)
                 y_ = y_.unsqueeze(1)
                 
-                z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(y_, X)
+                z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
                 
                 L = loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=0.15)
                 
@@ -137,25 +137,24 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
 	  
-            img_original = X_imgs[0].cpu().detach().numpy()
-            print(f"before {y_.shape}")
+            img_partial = y_[0].cpu().detach().numpy()
 
-            img_new = model.sample(X[0].unsqueeze(0))
-            img_new = img_new.squeeze(0).squeeze(0)
-            img_new = img_new.detach().cpu().numpy()
-            img_new_b = binarize(img_new)
+            img_train_reconstructed = model.sample(y_[0].unsqueeze(0))
+            img_train_reconstructed = img_train_reconstructed.squeeze(0).squeeze(0)
+            img_train_reconstructed = img_train_reconstructed.detach().cpu().numpy()
+            img_train_reconstructed_b = binarize(img_train_reconstructed)
 
             X_val_imgs, y_, _ = next(iter(val_loader))
-            X_val = X_val_imgs[0]
-            X_val = X_val.to(X.device)
-            X_val = X_val.to(X.dtype)
-            print(X_val.shape)
+            y_val = y_[0]
+            y_val = y_val.to(X.device)
+            y_val = y_val.to(X.dtype)
 
-            img_val = model.sample(X_val.unsqueeze(0).unsqueeze(0))
-            img_val_original = X_val.squeeze(0)
-            img_val = img_val.squeeze(0).squeeze(0)
-            img_val_reconstructed = img_val.detach().cpu().numpy()
-            img_val_original = img_val_original.detach().cpu().numpy()
+            img_val_reconstructed = model.sample(y_val.unsqueeze(0).unsqueeze(0))
+            img_val_partial = img_val_partial.squeeze(0)
+            img_val_partial = img_val_partial.squeeze(0).squeeze(0)
+            img_val_reconstructed = img_val_reconstructed.detach().cpu().numpy()
+            img_val_partial = img_val_partial.detach().cpu().numpy()
+            
             if time.time() - t >= 1:
                 t = time.time()
                 try:
@@ -164,7 +163,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                     pass
                 visualize(
                     axarr,
-                    [img_original, img_new, img_val_original, img_val_reconstructed],
+                    [img_train_partial, img_train_recontructed, img_val_partial, img_val_reconstructed],
                     ["Partial", "Training Reconstructed", "Validation Partial", "Validation Reconstruction"]
                 )
                 plt.pause(0.01)
@@ -223,12 +222,12 @@ if __name__ == "__main__":
     try:
         while True:
             i = np.random.randint(0, len(test_set))
-            img_partial, img_full, cat = test_set[i]
-            x = img_partial.reshape((1, image_size[0] * image_size[1]))
+            img_full, img_partial, cat = test_set[i]
+            y = img_partial.reshape((1, image_size[0] * image_size[1]))
             xd = x.to(device, dtype=torch.float32)
-            y_d = img_full.to(device, dtype=torch.float32)
+            xd = img_full.to(device, dtype=torch.float32)
             with torch.no_grad():
-                outd, _, _ = model(xd)
+                outd, _, _ = model(xd, yd)
                 yd = get_y(xd, outd)
                 yd = yd.reshape(image_size)
             y = yd.cpu()

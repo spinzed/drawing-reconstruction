@@ -3,6 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal, ContinuousBernoulli, kl_divergence
 
+"""
+Model where deocoder has both y and z as an argument
+"""
+
 def reparametrize(mu, logvar):
     std = torch.exp(0.5 * logvar)
     eps = torch.randn_like(std)

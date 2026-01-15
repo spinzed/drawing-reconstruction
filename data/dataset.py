@@ -40,8 +40,8 @@ class ImageDataset(Dataset):
 
         percentage = np.random.random() # [0, 1>
         num_strokes = max(int(len(strokes) * percentage), 1)
-        x = ut.compile_img(strokes, shape=self.image_shape, end=num_strokes)
-        y = ut.compile_img(strokes, shape=self.image_shape)
+        y = ut.compile_img(strokes, shape=self.image_shape, end=num_strokes)
+        x = ut.compile_img(strokes, shape=self.image_shape)
         y = erode_image(y)
         x = erode_image(x)
         return torch.tensor(x), torch.tensor(y), word
