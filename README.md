@@ -105,4 +105,4 @@ Trains `cvae_model_decoderz`
 
 ## Training
 
-To train cvae model just run `train_cvae.py` script.
+To train cvae model just run `python -m scripts.train_cvae.py` script.
