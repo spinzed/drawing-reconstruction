@@ -8,6 +8,7 @@
    - models  
    - data  
    - train  
+   - notebooks
 4. Training
 
 ---
@@ -96,8 +97,11 @@ Same parameters but is used to train `vae_model_bernoulli.py`.
 
 ---
 
-### Google colab notebooks
-
+### notebooks
+1. bernoulli_training.ipynb
+Trains `vae_model.py`
+2. train_cvae.ipynb
+Trains `cvae_model_decoderz`
 
 ## Training
 
