@@ -173,6 +173,12 @@ class ImageApp(QWidget):
 
         self.reset_canvas()
 
+        #self.dataset = np.load("quickdraw/alarm clock.npz", encoding="latin1", allow_pickle=True)
+        #data = dataset["train"]
+        #sequence = data[12832]
+        #print(sequence)
+        #self.set_canvas((utils.compile_img_from_sequence(sequence, img_shape=(512, 512)) * 255).astype(np.uint8))
+
         # --- Buttons ---
         self.redraw_button = QPushButton(text="Redraw")
         self.redraw_button.clicked.connect(self.on_redraw)
