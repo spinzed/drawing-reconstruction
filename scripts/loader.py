@@ -206,11 +206,12 @@ class SketchRNNGenerator(Generator):
 
         self.model.encoder.eval()
         self.model.decoder.eval()
-        in_sequence = ut.strokes_to_relative_sequence(strokes)
+
+        in_sequence = ut.strokes_to_relative_sequence(strokes, offset=(-self.image_size[1]//2, -self.image_size[0]//2))
         with torch.no_grad():
             out_sequence = self.model.sample(in_sequence)
-        #print("in_seq", in_sequence)
-        #print("out_seq", out_sequence)
+            #out_sequence[0, 0:2] += (self.image_size[1]//2, self.image_size[0]//2)
+
         total_sequence = np.vstack([in_sequence, out_sequence])
         img_out = ut.compile_img_from_sequence(total_sequence, relative_offsets=True, img_shape=self.image_size, img=img)
         return img_out

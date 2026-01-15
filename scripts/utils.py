@@ -93,7 +93,7 @@ def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 2
     if img is None:
         img = np.ones(img_shape)
 
-    x, y = sequence[0, 1], sequence[0, 0]
+    x, y = img_shape[1]//2 + sequence[0, 1], img_shape[0]//2 + sequence[0, 0]
     #color = np.random.uniform(size=3)
     last = False
     for i in range(1, len(sequence)):
@@ -113,7 +113,6 @@ def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 2
         last = False
 
         if entry[2] == 1:
-            xs, ys = 0, 0
             last = True
 
         if relative_offsets:
@@ -125,16 +124,41 @@ def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 2
 
     return img
 
-def strokes_to_relative_sequence(strokes):
+def compile2(sequence, img_shape=(256, 256), img=None):
+    if img is None:
+        img = np.ones(img_shape, dtype=np.float32)
+
+    # start near center (important, otherwise most sketches go out of frame)
+    y = img_shape[0] // 2
+    x = img_shape[1] // 2
+
+    for i in range(len(sequence)):
+        dy, dx, pen_up = sequence[i]
+
+        new_y = y + dy
+        new_x = x + dx
+
+        # draw only if pen is DOWN
+        if pen_up == 0:
+            xs, ys = lerp(x, y, new_x, new_y)
+            xs = np.clip(xs, 0, img_shape[1] - 1)
+            ys = np.clip(ys, 0, img_shape[0] - 1)
+            img[ys, xs] = 0
+
+        y, x = new_y, new_x
+
+    return img
+
+def strokes_to_relative_sequence(strokes, offset=None):
     sequence = []
-    lasty, lastx = 0, 0
+    lasty, lastx = None, None
     for stroke in strokes:
         xs = stroke[0]
         ys = stroke[1]
 
         for i in range(len(xs)):
-            if lasty is None or lastx is None:
-                sequence.append([xs[i], ys[i], 0])
+            if (lasty is None or lastx is None) and offset is not None:
+                sequence.append([xs[i] + offset[0], ys[i] + offset[1], 0])
             else:
                 sequence.append([xs[i] - lastx, ys[i] - lasty, 0])
             lasty, lastx = ys[i], xs[i]

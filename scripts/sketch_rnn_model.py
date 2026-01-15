@@ -10,7 +10,8 @@ import torch.nn.functional as F
 
 use_cuda = torch.cuda.is_available()
 device = "cuda" if use_cuda else "cpu"
-class_name = "alarm clock"
+class_name = "airplane"
+epochs = 50_000
 
 ###################################### hyperparameters
 class HParams():
@@ -29,8 +30,8 @@ class HParams():
         self.lr = 0.001
         self.lr_decay = 0.9999
         self.min_lr = 0.00001
-        self.grad_clip = 1.
-        self.temperature = 0.4
+        self.grad_clip = 1.0
+        self.temperature = 0.1
         self.max_seq_length = 200
 
 hp = HParams()
@@ -107,9 +108,11 @@ def make_batch(data, batch_size, Nmax):
 def transform_sequence(sequence, Nmax):
     len_seq = len(sequence[:, 0])
     new_seq = np.zeros((Nmax, 5))
-    new_seq[:len_seq, :3] = sequence[:, :3]
-    new_seq[:len_seq-1, 3] = 1 - sequence[:len_seq-1, 2]
-    new_seq[(len_seq):, 4] = 1
+    new_seq[:len_seq, :2] = sequence[:, :2]
+    new_seq[:len_seq-1, 2] = 1 - sequence[:len_seq-1, 2]
+    new_seq[:len_seq, 3] = sequence[:, 2]
+    new_seq[(len_seq-1):, 2] = 1 # not 4 because we don't want to end
+    new_seq[len_seq-1, 2:4] = 0
     return new_seq
 
 ################################ adaptive lr
@@ -192,6 +195,10 @@ class DecoderRNN(nn.Module):
         params_pen = params[-1] # pen up/down
         # identify mixture params:
         pi,mu_x,mu_y,sigma_x,sigma_y,rho_xy = torch.split(params_mixture,1,2)
+        # clamp to prevent NaN from exp/tanh overflow:
+        sigma_x = torch.clamp(sigma_x, -10, 10)
+        sigma_y = torch.clamp(sigma_y, -10, 10)
+        rho_xy = torch.clamp(rho_xy, -10, 10)
         # preprocess params::
         if self.training:
             len_out = self.Nmax+1
@@ -382,20 +389,35 @@ class SketchRNN():
             print(f"input too long (gotten {len(y)} lines, but max allowed is {self.Nmax}), clamping...")
             y = y[:self.Nmax, :]
 
-        Y, scale_factor = normalize([y.astype(np.float32)])
-        Y = Y[0]
-        y = transform_sequence(y, self.Nmax)
-        y = torch.from_numpy(np.stack(np.array([y]), 1)).float().to(device)
+        self.encoder.train(False)
+        self.decoder.train(False)
+
+        y_norm, scale_factor = normalize([y.astype(np.float32)])
+        y_norm = y_norm[0]
+        y_seq = transform_sequence(y_norm, self.Nmax)
+        y_seq = torch.from_numpy(np.stack([y_seq], 1)).float().to(device) # [Nmax, 1, 5]
 
         # encode:
-        z, _, _ = self.encoder(y, 1)
+        z, _, _ = self.encoder(y_seq, 1)
         sos = torch.tensor([0, 0, 1, 0, 0], dtype=torch.float32).view(1, 1, -1).to(device)
         s = sos
+        hidden_cell = None
+
+        L = len(y)
+
+        for i in range(L):
+            inp = torch.cat([s, z.unsqueeze(0)], 2)
+            _, _, _, _, _, _, _, h, c = self.decoder(inp, z, hidden_cell)
+            hidden_cell = (h, c)
+
+            real = y_seq[i].unsqueeze(0)
+            s = real
+
         seq_x = []
         seq_y = []
         seq_z = []
-        hidden_cell = None
-        for i in range(self.Nmax):
+
+        for i in range(self.Nmax-L):
             input = torch.cat([s, z.unsqueeze(0)], 2)
 
             # decode:
@@ -411,7 +433,7 @@ class SketchRNN():
             seq_z.append(pen_down)
 
             if eos:
-                print(i)
+                print("Eos:", i)
                 break
 
         #x_sample = np.cumsum(seq_x, 0)
@@ -422,7 +444,7 @@ class SketchRNN():
         z_sample = np.array(seq_z)
         sequence = np.stack([x_sample, y_sample, z_sample]).T
         sequence_rescaled = rescale([sequence], scale_factor)[0]
-        return sequence_rescaled.astype(np.int32)
+        return sequence_rescaled.astype(np.int32) # return without input strokes
 
     def sample_next_state(self):
 
@@ -435,10 +457,14 @@ class SketchRNN():
 
         # get mixture indice:
         pi = self.pi[0,0,:].detach().cpu().numpy()
+        if np.any(np.isnan(pi)):
+            pi = np.ones(hp.M) / hp.M  # uniform if NaN
         pi = adjust_temp(pi)
         pi_idx = np.random.choice(hp.M, p=pi)
         # get pen state:
         q = self.q[0,0,:].detach().cpu().numpy()
+        if np.any(np.isnan(q)):
+            q = np.ones(3) / 3  # uniform if NaN
         q = adjust_temp(q)
         q_idx = np.random.choice(3, p=q)
         # get mixture params:
@@ -515,7 +541,7 @@ if __name__=="__main__":
     model = SketchRNN(Nmax)
     model.set_data(data)
     try:
-        for epoch in range(50001):
+        for epoch in range(epochs+1):
             model.train(epoch)
     except KeyboardInterrupt:
         print("Training stopped early")
