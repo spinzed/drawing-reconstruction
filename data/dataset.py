@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 import os
-import utils as ut
+import data.utils as ut
 import cv2
 
 def erode_image(img, kernel_size=3, iterations=1):

@@ -5,8 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-from cvae_model_decoderz import CVAE as VAE
-from dataset import ImageDataset
+from models.cvae_model_decoderz import CVAE as VAE
+from data.dataset import ImageDataset
 
 # ---------------------------------------------------------------------
 # Global variables
@@ -118,7 +118,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 
                 z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(y_, X)
                 
-                L = loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=0.1S)
+                L = loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=0.15)
                 
                 L.backward()
                 if config["grad_clip"] is not None:

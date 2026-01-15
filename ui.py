@@ -1,4 +1,3 @@
-import sys
 from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QTextEdit
 )
@@ -7,8 +6,9 @@ from PySide6.QtCore import Qt, Signal
 import numpy as np
 import time
 import os
-import utils
-import loader
+import sys
+import data.utils as utils
+import data.loader as loader
 
 binarize = False
 img_shape = (256, 256)
