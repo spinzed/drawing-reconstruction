@@ -50,14 +50,14 @@ def lerp(x1, y1, x2, y2):
 
     return xs, ys
 
-def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None):
+def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None, pad = 10):
     assert end is None or end <= len(strokes), "end must be smaller or equal to list size"
 
     if img is None:
         img = np.ones(shape)
 
-    scale_x = shape[1] / 256
-    scale_y = shape[0] / 256
+    scale_x = shape[1] / (256 + pad)
+    scale_y = shape[0] / (256 + pad)
 
     # draw each stroke
     for stroke_ind in range(start, end if end is not None else len(strokes)):
@@ -68,8 +68,9 @@ def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None):
         final_xs = []
         final_ys = []
 
-        current_x = int(xs[0] * scale_y)
-        current_y = int(ys[0] * scale_x)
+        # scaling of points
+        current_x = int(xs[0] * scale_y) + pad // 2
+        current_y = int(ys[0] * scale_x) + pad  // 2
 
         # each stroke is composed of multiple registered key points, interpolate between each one of them
         for i in range(1, len(xs)):
