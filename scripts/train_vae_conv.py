@@ -5,8 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-from vae_model_classic_bernoulli import VAE
-from dataset import ImageDataset
+from models.vae_model_classic_bernoulli import VAE
+from data.dataset import ImageDataset
 
 # ---------------------------------------------------------------------
 # Global variables

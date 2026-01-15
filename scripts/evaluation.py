@@ -1,11 +1,10 @@
 import torch
-import numpy as np
 import matplotlib.pyplot as plt
 from torch.distributions import Normal, kl_divergence
 import torch.nn.functional as F
 
-from cvae_model_decoderz import CVAE
-from dataset import ImageDataset
+from models.cvae_model_decoderz import CVAE
+from data.dataset import ImageDataset
 
 # ---------------------------------------------------------------------
 # Config

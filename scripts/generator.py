@@ -1,16 +1,16 @@
 import torch
-import vae_model
-import vae_model_classic_bernoulli
-import cvae_model
-import cvae_model_decoderz
-import sketch_rnn_model
+import model.vae_model_classic_bernoulli as vae_model_classic_bernoulli
+import model.cvae_model as cvae_model
+import model.cvae_model_decoderz as cvae_model_decoderz
+import model.sketch_rnn_model as sketch_rnn_model
 import os
-import utils as ut
+import data.utils as ut
 import numpy as np
 
 binarization_threshold = 0.5
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model_residual = False
+latent_dim = 256
 
 def get_y(x, out):
     if model_residual:
@@ -20,28 +20,32 @@ def get_y(x, out):
 """
 Used by UI to load models from checkpoints.
 """
-
-class Loader:
+def Loader():
     def __init__(self, image_size):
         self.image_size = image_size
 
     def load_from_checkpoint(self, path):
         if not os.path.isfile(path):
-            raise RuntimeError("checkpoint file doesn't exist")
+            print("checkpoint file doesn't exist")
+            return None
 
         checkpoint = torch.load(path, weights_only=True)
 
-        if type(checkpoint) is not dict:
-            raise RuntimeError("checkpoint should be a dict")
+        if not type(checkpoint) == dict:
+            print("checkpoint should be a dict")
+            return None
 
         if "model_type" not in checkpoint:
-            raise RuntimeError("cannot get model type from checkpoint")
+            print("cannot get model type from checkpoint")
+            return None
 
         if "supported_classes" not in checkpoint:
-            raise RuntimeError("cannot get supported classes from checkpoint")
+            print("cannot get supported classes from checkpoint")
+            return None
 
         if len(checkpoint["supported_classes"]) == 0:
-            raise RuntimeError("model apparently supports no classes?")
+            print("model apparently supports no classes?")
+            return None
 
         model_type = checkpoint["model_type"]
 
@@ -59,17 +63,16 @@ class Loader:
             print(f"unknown model type {model_type}")
             return None
 
-        generator.init(model_type, self.image_size, checkpoint["supported_classes"], checkpoint)
-        generator.set_weights(checkpoint)
+        generator.init(self.image_size, checkpoint["supported_classes"])
 
+        generator.set_weights(checkpoint)
         return generator
 
 """
 Base implementation for image generators for each model type.
 """
 class Generator():
-    def init(self, model_type, image_size, supported_classes, checkpoint):
-        self.model_type = model_type
+    def init(self, image_size, supported_classes, checkpoint):
         self.image_size = image_size
         self.supported_classes = supported_classes
         self.weights_set = False
@@ -90,9 +93,6 @@ class Generator():
     def generate(self, img, strokes):
         pass
 
-    def additional_params(self):
-        return dict()
-
 class VaeGenerator(Generator):
     def init_model(self, checkpoint):
         self.weights_file = None
@@ -112,9 +112,6 @@ class VaeGenerator(Generator):
         X = imgd.reshape((1, self.image_size[0] * self.image_size[1]))
         out = self.model(X)
         return get_y(img, out)[0].cpu().detach().numpy()
-
-    def additional_params(self):
-        return {"latent dim": self.model.latent_dim, "hidden dim": self.model.hidden_dim}
 
 class ConvVaeGenerator(Generator):
     def init_model(self, checkpoint):
@@ -140,9 +137,6 @@ class ConvVaeGenerator(Generator):
         out = out_t.squeeze(0).squeeze(0).cpu().detach().numpy()
         return out
 
-    def additional_params(self):
-        return {"latent dim": self.model.latent_dim}
-
 class CVaeGenerator(Generator):
     def init_model(self, checkpoint):
         self.model = cvae_model.CVAE(self.image_size[0], checkpoint["latent_dim"], device=torch.device(device))
@@ -162,9 +156,6 @@ class CVaeGenerator(Generator):
             x_prob = self.model.sample(y)
         out = x_prob.squeeze(0).squeeze(0).cpu().detach().numpy()
         return out
-
-    def additional_params(self):
-        return {"latent dim": self.model.latent_dim}
 
 class CVaeDekoderzGenerator(Generator):
     def init_model(self, checkpoint):
@@ -186,9 +177,6 @@ class CVaeDekoderzGenerator(Generator):
         out = x_prob.squeeze(0).squeeze(0).cpu().detach().numpy()
         return out
 
-    def additional_params(self):
-        return {"latent dim": self.model.latent_dim}
-
 class SketchRNNGenerator(Generator):
     def init_model(self, checkpoint):
         self.model = sketch_rnn_model.SketchRNN(0)
@@ -206,15 +194,11 @@ class SketchRNNGenerator(Generator):
 
         self.model.encoder.eval()
         self.model.decoder.eval()
-
-        in_sequence = ut.strokes_to_relative_sequence(strokes, offset=(-self.image_size[1]//2, -self.image_size[0]//2))
+        in_sequence = ut.strokes_to_relative_sequence(strokes)
         with torch.no_grad():
             out_sequence = self.model.sample(in_sequence)
-            #out_sequence[0, 0:2] += (self.image_size[1]//2, self.image_size[0]//2)
-
+        #print("in_seq", in_sequence)
+        #print("out_seq", out_sequence)
         total_sequence = np.vstack([in_sequence, out_sequence])
         img_out = ut.compile_img_from_sequence(total_sequence, relative_offsets=True, img_shape=self.image_size, img=img)
         return img_out
-
-    def additional_params(self):
-        return {"Nmax": self.model.Nmax}
