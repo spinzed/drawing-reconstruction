@@ -15,7 +15,7 @@ from data.dataset import ImageDataset
 dataset_dir = "quickdraw"
 batch_size = 64
 device = "cuda" if torch.cuda.is_available() else "cpu"
-image_limit = 64
+image_limit = 10000
 image_size = (64, 64)
 binarization_threshold = 0.55
 model_weights_save_path = "ice_weights.pth"
