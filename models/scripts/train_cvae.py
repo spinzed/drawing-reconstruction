@@ -5,8 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-from models.cvae_model_decoderz import CVAE as VAE
+from models.cvae_model import CVAE as VAE
 from data.dataset import ImageDataset
+import torch.optim.lr_scheduler as lr_scheduler
 
 # ---------------------------------------------------------------------
 # Global variables
@@ -15,19 +16,21 @@ from data.dataset import ImageDataset
 dataset_dir = "quickdraw"
 batch_size = 64
 device = "cuda" if torch.cuda.is_available() else "cpu"
-image_limit = 10000
+image_limit = 25000
 image_size = (64, 64)
 binarization_threshold = 0.55
-model_weights_save_path = "ice_weights.pth"
+model_weights_save_path = "book.pth"
 #item = "cat"
-item = "ice cream"
+item = "book"
 model_residual = False
 latent_dim  = 256
 checkpointing = True
+gamma = 0.5
+step_size = 5
 
 config = {
     "epochs": 100,
-    "lr": 1e-4,
+    "lr": 1e-3,
     "weight_decay": 1e-8,
     "grad_clip": 0.01,
     "loss": VAE.loss
@@ -51,13 +54,13 @@ def eval_loss(loader, loss):
 
     with torch.no_grad():
         for X, y_, cats in loader:            
-            X = y_.to(device, dtype=torch.float32)
+            X = X.to(device, dtype=torch.float32)
             X = X.unsqueeze(1)
             y_ = y_.unsqueeze(1)
             y_ = y_.to(device, dtype=torch.float32)
             z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
             batch_size = X.size(0)
-            L_total += loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0).item() * batch_size
+            L_total += loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0).item() * batch_size
             total_samples += batch_size
 
     return L_total / total_samples
@@ -88,7 +91,7 @@ def save_model(model, model_weights_save_path=model_weights_save_path):
 
 def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, config):
     optimizer = torch.optim.Adam(params=model.parameters(), lr=config["lr"], weight_decay=config["weight_decay"])
-
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     model = model.to(device)
     Ls_train = []
     Ls_val = []
@@ -100,6 +103,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
     f, axarr = plt.subplots(1, n_graphs, figsize=(3 * n_graphs, 4))
     t = time.time()
     loss = config["loss"]
+    betas = np.linspace(0, 1, 10)
     #betas = np.linspace(0, 1, 5)
     #beta = 0
 
@@ -107,10 +111,14 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
         for epoch in range(epochs):
             print(f"Epoch {epoch+1}/{epochs}")
             model.train()
+            
+            if epoch < len(betas):
+                beta = betas[epoch]
+            else:
+                beta = 1
 
             for i, (X_imgs, y_, cats) in enumerate(train_loader):
                 optimizer.zero_grad()
-
                 X = X_imgs.to(device, dtype=torch.float32)
                 y_ = y_.to(device, dtype=torch.float32)
                 X = X.unsqueeze(1)
@@ -118,7 +126,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 
                 z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
                 
-                L = loss(y_, X, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=0.15)
+                L = loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=beta)
                 
                 L.backward()
                 if config["grad_clip"] is not None:
@@ -133,6 +141,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             Ls_train.append(L_train)
             Ls_val.append(L_val)
 
+            scheduler.step()
 
 
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
@@ -190,7 +199,8 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
     cutoff = vals[int(0.5 * len(vals))] * 2
     plt.ylim(0, cutoff)
     plt.show()
-
+    np.save(f"{model_weights_save_path}_val_loss.npy", Ls_val)
+    np.save(f"{model_weights_save_path}_train_loss.npy", Ls_train)
 
 # ---------------------------------------------------------------------
 # Main

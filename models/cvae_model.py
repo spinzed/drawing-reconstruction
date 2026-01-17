@@ -3,10 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal, ContinuousBernoulli, kl_divergence
 
-"""
-Model where deocoder has both y and z as an argument
-"""
-
 def reparametrize(mu, logvar):
     std = torch.exp(0.5 * logvar)
     eps = torch.randn_like(std)
@@ -48,52 +44,21 @@ class GaussianEncoder(nn.Module):
         return self.mean(h), self.logvar(h)
 
 class GaussianDecoder(nn.Module):
-    """Decoder modeling p(x|z,y)"""
-    def __init__(self, latent_dim, input_dim, film_hidden_dim = 128):
+    """Decoder modeling p(x|z,y) with partial input conditioning"""
+    def __init__(self, latent_dim, input_dim):
         super().__init__()
-        self.init_channels = 128
+        self.init_channels = 64
         self.init_spatial = input_dim // 4  # match encoder downsampling
 
+        # Project latent z to spatial feature map
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, self.init_channels * self.init_spatial * self.init_spatial),
             nn.LeakyReLU(0.2)
         )
 
-        self.down_block = nn.AvgPool2d(kernel_size=4, stride=4)
-        
-        self.film_net = nn.Sequential(
-            # 256 → 128
-            nn.Conv2d(
-                in_channels=1,               # or y_channels
-                out_channels=film_hidden_dim,
-                kernel_size=4,
-                stride=2,
-                padding=1
-            ),
-            nn.ReLU(),
-
-            # 128 → 64
-            nn.Conv2d(
-                film_hidden_dim,
-                film_hidden_dim,
-                kernel_size=4,
-                stride=2,
-                padding=1
-            ),
-            nn.ReLU(),
-
-            # produce gamma + beta
-            nn.Conv2d(
-                film_hidden_dim,
-                2 * self.init_channels,
-                kernel_size=3,
-                padding=1
-            )
-        )
-
         # Conv decoder
         self.trunk = nn.Sequential(
-            nn.ConvTranspose2d(self.init_channels, 64, 4, stride=2, padding=1),
+            nn.ConvTranspose2d(self.init_channels + 1, 64, 4, stride=2, padding=1),  # +1 for partial input
             nn.LeakyReLU(0.2),
             nn.Conv2d(64, 64, 3, padding=1),
             nn.LeakyReLU(0.2),
@@ -103,22 +68,25 @@ class GaussianDecoder(nn.Module):
             nn.Conv2d(32, 32, 3, padding=1),
             nn.LeakyReLU(0.2),
         )
+
         self.mean_head = nn.Conv2d(32, 1, 3, padding=1)  # output logits for Bernoulli
 
     def forward(self, z, y):
-        gamma, beta = self.film_net(y).chunk(2, dim=1)
+        # z: [B, latent_dim]
+        # y: [B, 1, H, W] partial input
         h = self.fc(z)
         h = h.view(z.size(0), self.init_channels, self.init_spatial, self.init_spatial)
-        h = torch.mul(h, gamma) + beta
-        #print(gamma.shape)
-        #h = h.view(z.size(0), self.init_channels, self.init_spatial* self.init_spatial)
-        #print(h.shape)
 
-        #print(h.shape)
+        # Resize partial input to match latent spatial size
+        y_resized = F.interpolate(y, size=(self.init_spatial, self.init_spatial), mode='bilinear', align_corners=False)
 
+        # Concatenate along channel dimension
+        h = torch.cat([h, y_resized], dim=1)  # now channels = init_channels + 1
 
+        # Pass through conv trunk
         h = self.trunk(h)
-        x_logits = self.mean_head(h)
+        s = self.mean_head(h)
+        x_logits = y + s
         return x_logits
 
 class CVAE(nn.Module):
@@ -134,7 +102,7 @@ class CVAE(nn.Module):
 
     def forward(self, x, y):
         mu_p, logvar_p = self.encoder_prior(y)
-        
+
         xy = torch.cat([x, y], dim=1)
         mu_q, logvar_q = self.encoder_post(xy)
 
@@ -146,15 +114,17 @@ class CVAE(nn.Module):
         return z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob
 
     def sample(self, y):
-        z = torch.randn([y.size(0), self.latent_dim], device=y.device)
+        mu_p, logvar_p = self.encoder_prior(y)
+        #z = reparametrize(mu_p, logvar_p)        
+        z = mu_p
         x_logits = self.decoder(z, y)
         return torch.sigmoid(x_logits)
 
     @staticmethod
     def loss(x, y, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0):
         """CVAE ELBO loss"""
-        dist = ContinuousBernoulli(logits=x_logits)
-        recon_loss = -dist.log_prob(x).flatten(1).mean(1)  
+        recon_loss = F.binary_cross_entropy_with_logits(x_logits, x, reduction='none')
+        recon_loss = recon_loss.flatten(1).mean(1)  
 
         q_dist = Normal(mu_q, torch.exp(0.5 * logvar_q))
         p_dist = Normal(mu_p, torch.exp(0.5 * logvar_p))

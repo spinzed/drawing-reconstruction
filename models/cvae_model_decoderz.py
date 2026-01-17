@@ -78,6 +78,7 @@ class GaussianDecoder(nn.Module):
         x_logits = self.mean_head(h)
         return x_logits
 
+
 class CVAE(nn.Module):
     def __init__(self, input_dim, latent_dim=200, device="cpu"):
         super().__init__()
