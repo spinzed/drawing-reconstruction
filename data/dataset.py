@@ -5,6 +5,8 @@ import os
 import data.utils as ut
 import cv2
 
+with_strokes = True
+
 def erode_image(img, kernel_size=3, iterations=1):
     kernel = np.ones((kernel_size, kernel_size), np.uint8)
     img = img.astype(np.uint8)
@@ -39,9 +41,16 @@ class ImageDataset(Dataset):
         word = entry["word"]
 
         percentage = np.random.random() # [0, 1>
-        num_strokes = max(int(len(strokes) * percentage), 1)
-        y = ut.compile_img(strokes, shape=self.image_shape, end=num_strokes)
-        x = ut.compile_img(strokes, shape=self.image_shape)
+
+        if with_strokes:
+            num_strokes = max(int(len(strokes) * percentage), 1)
+            y = ut.compile_img(strokes, shape=self.image_shape, end=num_strokes)
+            x = ut.compile_img(strokes, shape=self.image_shape)
+        else:
+            sequence = ut.strokes_to_relative_sequence(strokes)
+            num_strokes = max(int(len(sequence) * percentage), 1)
+            y = ut.compile_img_from_sequence(sequence[:num_strokes], img_shape=self.image_shape)
+            x = ut.compile_img_from_sequence(sequence, img_shape=self.image_shape)
         y = erode_image(y)
         x = erode_image(x)
         return torch.tensor(x), torch.tensor(y), word

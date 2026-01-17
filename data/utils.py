@@ -50,14 +50,14 @@ def lerp(x1, y1, x2, y2):
 
     return xs, ys
 
-def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None, pad = 10):
+def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None, pad=10):
     assert end is None or end <= len(strokes), "end must be smaller or equal to list size"
 
     if img is None:
         img = np.ones(shape)
 
-    scale_x = shape[1] / (256 + pad)
-    scale_y = shape[0] / (256 + pad)
+    scale_x = (shape[1] - pad) / 256
+    scale_y = (shape[0] - pad) / 256
 
     # draw each stroke
     for stroke_ind in range(start, end if end is not None else len(strokes)):
@@ -70,7 +70,7 @@ def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None, pad = 10
 
         # scaling of points
         current_x = int(xs[0] * scale_y) + pad // 2
-        current_y = int(ys[0] * scale_x) + pad  // 2
+        current_y = int(ys[0] * scale_x) + pad // 2
 
         # each stroke is composed of multiple registered key points, interpolate between each one of them
         for i in range(1, len(xs)):
@@ -90,9 +90,12 @@ def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None, pad = 10
 """
 Sequence is an array-like of shape (seq_length, [dx, dy, stroke_end(bool)])
 """
-def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 256), img=None):
+def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 256), img=None, pad=10):
     if img is None:
         img = np.ones(img_shape)
+
+    scale_x = (img_shape[1] - pad) / 256
+    scale_y = (img_shape[0] - pad) / 256
 
     x, y = img_shape[1]//2 + sequence[0, 1], img_shape[0]//2 + sequence[0, 0]
     #color = np.random.uniform(size=3)
@@ -110,6 +113,8 @@ def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 2
             xs, ys = lerp(x, y, x2, y2)
             xs = np.clip(xs, 0, img_shape[1]-1)
             ys = np.clip(ys, 0, img_shape[0]-1)
+            xs = np.floor(xs * scale_x).astype(np.uint8) + pad // 2
+            ys = np.floor(ys * scale_y).astype(np.uint8) + pad // 2
             img[xs, ys] = 0
         last = False
 
@@ -152,16 +157,15 @@ def compile2(sequence, img_shape=(256, 256), img=None):
 
 def strokes_to_relative_sequence(strokes, offset=None):
     sequence = []
-    lasty, lastx = None, None
+    lasty, lastx = 0, 0
+    if offset is not None:
+        lasty, lastx = offset
     for stroke in strokes:
         xs = stroke[0]
         ys = stroke[1]
 
         for i in range(len(xs)):
-            if (lasty is None or lastx is None) and offset is not None:
-                sequence.append([xs[i] + offset[0], ys[i] + offset[1], 0])
-            else:
-                sequence.append([xs[i] - lastx, ys[i] - lasty, 0])
+            sequence.append([xs[i] - lastx, ys[i] - lasty, 0])
             lasty, lastx = ys[i], xs[i]
             sequence[-1][2] = 0
 
