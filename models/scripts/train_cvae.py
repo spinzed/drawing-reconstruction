@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import os
-from evaluation_train import generate_and_save_images
+from models.scripts.evaluation_train import generate_and_save_images
 
 from models.cvae_model import CVAE as VAE
 from data.dataset import ImageDataset
@@ -21,9 +21,9 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 image_limit =  25000
 image_size = (64, 64)
 binarization_threshold = 0.5
-model_weights_save_path = "weights/mug.pth"
+model_weights_save_path = "weights/ice_cream.pth"
 #item = "cat"
-item = "mug"
+item = "ice cream"
 model_residual = False
 latent_dim  = 512
 checkpointing = True
@@ -233,10 +233,8 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
     Ls_train = np.array(Ls_train)
     np.save(f"{item}_val_loss.npy", Ls_val)
     np.save(f"{item}_train_loss.npy", Ls_train)
-    image_dir = f"images_{item}"
-    os.makedirs(os.path.dirname(image_dir), exist_ok=True)
 
-    generate_and_save_images(model, test_loader, image_dir, 'cuda', item, 20)
+    generate_and_save_images(model, test_loader, f"images/{item}/", 'cuda', item, 20)
 
 # ---------------------------------------------------------------------
 # Main

@@ -3,7 +3,14 @@ import torch
 import matplotlib.pyplot as plt
 from torch.distributions import Normal, kl_divergence
 import torch.nn.functional as F
-from models.scripts.train_cvae import binarize
+import numpy as np
+
+binarization_threshold = 0.5
+
+def binarize(img, binarization_threshold=binarization_threshold):
+    binary = np.ones_like(img, dtype=np.float32)
+    binary[img < binarization_threshold] = 0
+    return binary
 
 def generate_and_save_images(
     model,
