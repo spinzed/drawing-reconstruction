@@ -1,5 +1,5 @@
-# Variational Encoder for Handwritten Image Reconstruction
-This project Conditional Variational Autoencoders (CVAE) to reconstruct and complete handwritten drawings from the QuickDraw dataset.
+# Handwritten Image Reconstruction
+This project uses Conditional Variational Autoencoder (CVAE) to reconstruct and complete handwritten drawings from the QuickDraw dataset.
 
 ## Table of Contents
 
