@@ -23,16 +23,16 @@ The resulting weights will be saved in checkpoints in the `checkpoints` director
 desired checkpoint to `weights` and run `python -m ui` run a QT-based UI for custom input reconstruction.
 
 ## Project Structure
-| Path          | Description                                                                    |
-|---------------|--------------------------------------------------------------------------------|
-| data/         | Dataset classes and preprocessing utilities                                    |
-| images/       | Demonstrative image examples produced by our model                             |
-| models/       | CVAE model implementations                                                     |
-|   |- scripts/ | Training entry points                                                          |
-| notebooks/    | Experimental Jupyter notebooks                                                 |
-| quickdraw/    | Data download scripts                                                          |
-| analysis.pdf  | Analysis of the model written as a paper. Available in Croatian language only. |
-| ui.py         | Used for interactive inspection of the trained model                           |
+| Path            | Description                                                                    |
+|-----------------|--------------------------------------------------------------------------------|
+| data/           | Dataset classes and preprocessing utilities                                    |
+| images/         | Demonstrative image examples produced by our model                             |
+| models/         | CVAE model implementations                                                     |
+| models/scripts/ | Training entry points                                                          |
+| notebooks/      | Experimental Jupyter notebooks                                                 |
+| quickdraw/      | Data download scripts                                                          |
+| analysis.pdf    | Analysis of the model written as a paper. Available in Croatian language only. |
+| ui.py           | Used for interactive inspection of the trained model                           |
 
 ### 1. Data (`/data`)
 
