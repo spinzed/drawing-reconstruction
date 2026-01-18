@@ -16,22 +16,22 @@ import torch.optim.lr_scheduler as lr_scheduler
 dataset_dir = "quickdraw"
 batch_size = 64
 device = "cuda" if torch.cuda.is_available() else "cpu"
-image_limit = 25000
+image_limit =  25000
 image_size = (64, 64)
-binarization_threshold = 0.55
-model_weights_save_path = "book.pth"
+binarization_threshold = 0.5
+model_weights_save_path = "smiley_face.pth"
 #item = "cat"
-item = "book"
+item = "smiley face"
 model_residual = False
-latent_dim  = 256
+latent_dim  = 512
 checkpointing = True
 gamma = 0.5
 step_size = 5
 
 config = {
-    "epochs": 100,
+    "epochs": 50,
     "lr": 1e-3,
-    "weight_decay": 1e-8,
+    "weight_decay": 1e-9,
     "grad_clip": 0.01,
     "loss": VAE.loss
     #"loss": nn.L1Loss(),
@@ -50,6 +50,8 @@ def eval_loss(loader, loss):
     model.eval()
 
     L_total = 0
+    L_recon_total = 0
+    L_kl_total = 0
     total_samples = 0
 
     with torch.no_grad():
@@ -60,10 +62,16 @@ def eval_loss(loader, loss):
             y_ = y_.to(device, dtype=torch.float32)
             z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
             batch_size = X.size(0)
-            L_total += loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0).item() * batch_size
+            Lk, Lk_recon, Lk_kl= loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0) 
+            Lk_kl = Lk_kl.item() * batch_size
+            Lk = Lk.item() * batch_size
+            Lk_recon = Lk_recon.item() * batch_size
+            L_total += Lk
+            L_recon_total += Lk_recon
+            L_kl_total += Lk_kl
             total_samples += batch_size
 
-    return L_total / total_samples
+    return L_total / total_samples, L_recon_total / total_samples, L_kl_total / total_samples
 
 def visualize(axarr, images, titles):
     assert len(images) == len(titles)
@@ -126,7 +134,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 
                 z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
                 
-                L = loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=beta)
+                L , _, _= loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=beta)
                 
                 L.backward()
                 if config["grad_clip"] is not None:
@@ -136,13 +144,13 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 
                 #print(f"---> {i+1}/{len(train_loader)}, loss: {L:.6f}, grad_norm: {grad_norm:.6f}")
 
-            L_train = eval_loss(train_loader, loss)
-            L_val = eval_loss(val_loader, loss)
-            Ls_train.append(L_train)
-            Ls_val.append(L_val)
+            L_train, recon_train, kl_train = eval_loss(train_loader, loss)
+            L_val, recon_val, kl_val = eval_loss(val_loader, loss)
+            Ls_train.append([L_train, recon_train, kl_train])
+            Ls_val.append([L_val, recon_val, kl_val])
+            
 
             scheduler.step()
-
 
             print(f"-> Total epoch {epoch+1}/{epochs} loss_train: {L_train:.6f}, loss_val: {L_val:.6f}")
             img_train_partial = y_[0]
@@ -166,6 +174,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
             img_val_reconstructed = img_val_reconstructed.squeeze(0).squeeze(0)
             img_val_reconstructed = img_val_reconstructed.detach().cpu().numpy()
             img_val_partial = img_val_partial.detach().cpu().numpy()
+            img_val_binarized = binarize(img_val_reconstructed)
 
             if time.time() - t >= 1:
                 t = time.time()
@@ -175,8 +184,8 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                     pass
                 visualize(
                     axarr,
-                    [img_train_partial, img_train_reconstructed, img_val_partial, img_val_reconstructed],
-                    ["Partial", "Training Reconstructed", "Validation Partial", "Validation Reconstruction"]
+                    [img_train_reconstructed, img_val_partial, img_val_reconstructed, img_val_binarized],
+                    ["Training Reconstructed", "Validation Partial", "Validation Reconstruction", "Binarized Reconstruction"]
                 )
                 plt.pause(0.01)
                 print(f"Max pixel: {np.max(img_val_reconstructed)}")
@@ -184,23 +193,28 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
 
             if epoch % 5 == 0 and checkpointing:
                 save_model(model, f"checkpoint_epoch_{epoch}_{model_weights_save_path}")
-
-
         
     except KeyboardInterrupt:
         print("Early stop")
-
+    Ls_train = np.array(Ls_train)
+    Ls_val = np.array(Ls_val)
     plt.ioff()
     plt.close()
+    print(Ls_train[:, 0])
+    print(Ls_train[:, 0])
+    print(Ls_val[0])
+    print()
 
     plt.plot(Ls_train, label="Train Losses")
-    plt.plot(Ls_val, label="Val Losses")
-    vals = sorted(Ls_train + Ls_val)
+    plt.plot(Ls_val[:, 0], label="Val Losses")
+    vals = sorted(Ls_train[0] + Ls_val[0])
     cutoff = vals[int(0.5 * len(vals))] * 2
     plt.ylim(0, cutoff)
     plt.show()
-    np.save(f"{model_weights_save_path}_val_loss.npy", Ls_val)
-    np.save(f"{model_weights_save_path}_train_loss.npy", Ls_train)
+    Ls_val = np.array(Ls_val)
+    Ls_train = np.array(Ls_train)
+    np.save(f"{item}_val_loss.npy", Ls_val)
+    np.save(f"{item}_train_loss.npy", Ls_train)
 
 # ---------------------------------------------------------------------
 # Main
@@ -224,9 +238,9 @@ if __name__ == "__main__":
 
     loss = config["loss"]
 
-    L_train = eval_loss(train_loader, loss)
-    L_val = eval_loss(val_loader, loss)
-    L_test = eval_loss(test_loader, loss)
+    L_train, recon_train, kl_train = eval_loss(train_loader, loss)
+    L_val, recon_val, kl_val = eval_loss(val_loader, loss)
+    L_test, recon_test, kl_test = eval_loss(test_loader, loss)
 
     print(f"Final losses: train - {L_train:.6f}, val - {L_val:.6f}, test - {L_test:.6f}")
 

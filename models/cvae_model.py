@@ -47,7 +47,7 @@ class GaussianDecoder(nn.Module):
     """Decoder modeling p(x|z,y) with partial input conditioning"""
     def __init__(self, latent_dim, input_dim):
         super().__init__()
-        self.init_channels = 64
+        self.init_channels = 128
         self.init_spatial = input_dim // 4  # match encoder downsampling
 
         # Project latent z to spatial feature map
@@ -131,4 +131,4 @@ class CVAE(nn.Module):
         kl = kl_divergence(q_dist, p_dist).mean(1)
 
         loss = (recon_loss + beta * kl).mean()
-        return loss
+        return loss, recon_loss.mean(), kl.mean()
