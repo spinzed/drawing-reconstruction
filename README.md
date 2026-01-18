@@ -17,8 +17,8 @@ You can find the analysis of the our model in [analysis.pdf](analysis.pdf).\
 1. Download Dataset: Use the `./quickdraw/download.sh` shell script to fetch the QuickDraw .ndjson files.
 Currently, the script is configured for a single category to streamline initial training, but any number of other categories can be fetched for training if so desired.
 2. Environment Setup: `pip install -r requirements.txt`
-3. Entry Points: Run `python -m scripts.train_cvae` to train the model.
-To change the hyperparameters, open the `scripts/train_cvae` file itself and modify there in-place.
+3. Entry Points: Run `python -m models.scripts.train_cvae` to train the model.
+To change the hyperparameters, open the `models/scripts/train_cvae` file itself and modify there in-place.
 The resulting weights will be saved in checkpoints in the `checkpoints` directory, from there move
 desired checkpoint to `weights` and run `python -m ui` run a QT-based UI for custom input reconstruction.
 
