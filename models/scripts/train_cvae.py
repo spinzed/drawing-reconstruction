@@ -18,14 +18,14 @@ import torch.optim.lr_scheduler as lr_scheduler
 dataset_dir = "quickdraw"
 batch_size = 64
 device = "cuda" if torch.cuda.is_available() else "cpu"
-image_limit =  25000
+image_limit =  100000
 image_size = (64, 64)
 binarization_threshold = 0.5
 model_weights_save_path = "weights/ice_cream.pth"
 #item = "cat"
 item = "ice cream"
 model_residual = False
-latent_dim  = 512
+latent_dim  = 32
 checkpointing = True
 gamma = 0.5
 step_size = 5
@@ -129,7 +129,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
     f, axarr = plt.subplots(1, n_graphs, figsize=(3 * n_graphs, 4))
     t = time.time()
     loss = config["loss"]
-    betas = np.linspace(0, 1, 10)
+    betas = np.linspace(1, 1, 10)
     #betas = np.linspace(0, 1, 5)
     #beta = 0
 

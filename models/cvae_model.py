@@ -112,23 +112,35 @@ class CVAE(nn.Module):
         x_prob = torch.sigmoid(x_logits)
 
         return z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob
+    
+    def sample(self, y, temperature = 0.1):
+        batch_size = y.shape[0]
 
-    def sample(self, y):
         mu_p, logvar_p = self.encoder_prior(y)
-        #z = reparametrize(mu_p, logvar_p)        
-        z = mu_p
+        z = reparametrize(mu_p, logvar_p)
+
         x_logits = self.decoder(z, y)
+
         return torch.sigmoid(x_logits)
 
     @staticmethod
     def loss(x, y, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=1.0):
-        """CVAE ELBO loss"""
-        recon_loss = F.binary_cross_entropy_with_logits(x_logits, x, reduction='none')
-        recon_loss = recon_loss.flatten(1).mean(1)  
+        """CVAE ELBO loss with Continuous Bernoulli likelihood"""
 
+        # Convert logits → probabilities
+        x_probs = torch.sigmoid(x_logits)
+
+        # Continuous Bernoulli reconstruction loss
+        cb = ContinuousBernoulli(probs=x_probs)
+        recon_loss = -cb.log_prob(x)
+        recon_loss = recon_loss.flatten(1).mean(1)
+
+        # KL divergence
         q_dist = Normal(mu_q, torch.exp(0.5 * logvar_q))
         p_dist = Normal(mu_p, torch.exp(0.5 * logvar_p))
         kl = kl_divergence(q_dist, p_dist).mean(1)
 
+        # ELBO
         loss = (recon_loss + beta * kl).mean()
+
         return loss, recon_loss.mean(), kl.mean()
