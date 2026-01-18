@@ -1,6 +1,7 @@
 import json
 import numpy as np
 import matplotlib.pylab as plt
+import cv2
 
 drawings = []
 
@@ -128,7 +129,7 @@ def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 2
             x = entry[1]
             y = entry[0]
 
-    return img
+    return img # returns float image with binary values (0, 1)
 
 def compile2(sequence, img_shape=(256, 256), img=None):
     if img is None:
@@ -181,6 +182,11 @@ def scale_sequence_to_size(sequence, size=256):
     s2 = s2.astype(np.int32)
 
     return s2
+
+def erode_image(img, kernel_size=3, iterations=1):
+    kernel = np.ones((kernel_size, kernel_size), np.uint8)
+    img = img.astype(np.uint8)
+    return cv2.erode(img, kernel, iterations=iterations)
 
 # for debugging
 class CompileTest:

@@ -80,15 +80,19 @@ def binarize(img, binarization_threshold=binarization_threshold):
     binary[img < binarization_threshold] = 0
     return binary
 
-def save_model(model, epoch=None):
+def save_model(model, epoch=None, train_images_num=None):
     checkpoint = {
         "model_type": "CVAE",
+        "image_size": image_size,
+        "train_images": train_images_num,
+        "epoch": epoch,
         "supported_classes": [item],
         "weights": model.state_dict(),
-        "epoch": epoch,
         "latent_dim": latent_dim,
     }
     path = model_weights_save_path
+    if train_images_num is not None:
+        path += f"_n{train_images_num}"
     if epoch is not None:
         path += f"_epoch{epoch}"
     path += ".pth"
@@ -195,7 +199,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 print(f"Min pixel: {np.min(img_val_reconstructed)}")
 
             if epoch % 5 == 0 and checkpointing:
-                save_model(model, epoch=epoch)
+                save_model(model, epoch=epoch, train_images_num=len(train_loader.dataset))
 
 
         

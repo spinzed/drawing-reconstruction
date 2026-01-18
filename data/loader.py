@@ -5,6 +5,7 @@ from models import cvae_model_decoderz
 from models import sketch_rnn_model
 from data import utils
 import os
+import cv2
 
 binarization_threshold = 0.5
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -74,6 +75,7 @@ class Generator():
         self.image_size = None
         self.init_model(checkpoint)
         self.set_weights(checkpoint)
+        self.checkpoint = checkpoint
 
     """
     Virtual methods to be implemented by each model type.
@@ -107,13 +109,15 @@ class CVaeGenerator(Generator):
             raise RuntimeError("weights must be set first")
 
         img_gen_size = utils.compile_img_from_strokes(strokes, img_shape=self.image_size)
-        float_img = (img_gen_size / 255).astype(np.float32)
+        #img_gen_size = utils.erode_image(img_gen_size)
+        img_gen_size = img_gen_size.astype(np.float32)
 
         self.model.eval()
-        y = torch.tensor(float_img, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
+        y = torch.tensor(img_gen_size, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
         with torch.no_grad():
             x_prob = self.model.sample(y)
         out = x_prob.squeeze(0).squeeze(0).cpu().detach().numpy()
+
         return out
 
     def additional_params(self):
@@ -134,15 +138,14 @@ class CVaeDekoderzGenerator(Generator):
             raise RuntimeError("weights must be set first")
 
         img_gen_size = utils.compile_img_from_strokes(strokes, img_shape=self.image_size)
-        float_img = (img_gen_size / 255).astype(np.float32)
+        #img_gen_size = utils.erode_image(img_gen_size)
+        img_gen_size = img_gen_size.astype(np.float32)
 
         self.model.eval()
-        y = torch.tensor(float_img, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
+        y = torch.tensor(img_gen_size, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
         with torch.no_grad():
             x_prob = self.model.sample(y)
         out = x_prob.squeeze(0).squeeze(0).cpu().detach().numpy()
-
-
 
         return out
 
@@ -172,7 +175,7 @@ class SketchRNNGenerator(Generator):
             out_sequence = self.model.sample(in_sequence)
 
         total_sequence = np.vstack([in_sequence, out_sequence])
-        img_out = ut.compile_img_from_sequence(total_sequence, relative_offsets=True, img_shape=self.image_size, img=img)
+        img_out = utils.compile_img_from_sequence(total_sequence, relative_offsets=True, img_shape=self.image_size, img=img)
         return img_out
 
     def additional_params(self):
