@@ -98,16 +98,16 @@ Interactive notebooks used for testing and training.
 Contains the script for downloading the dataset and serves as the container for the dataset itself.
 
 ## Results/Examples
-
+Example reconstruction for some of the classes:
 | Partial input | Reconstruction | Binarized reconstruction |
 | :---: | :---: | :---: |
 | ![Partial book](images/book/sample_0_book_partial.png) <br> (a) Partial book | ![Reconstruction book](images/book/sample_book_0_reconstruction.png) <br> (b) Reconstructed book | ![Binarized book](images/book/sample_book_0_reconstruction_binarized.png) <br> (c) Binarizirana book |
 | ![Partial ice cream](images/ice_cream/sample_3_ice%20cream_partial.png) <br> (d) Partial ice cream | ![Reconstruction ice cream](images/ice_cream/sample_ice%20cream_3_reconstruction.png) <br> (e) Reconstructed ice cream | ![Binarized ice cream](images/ice_cream/sample_ice%20cream_3_reconstruction_binarized.png) <br> (f) Binarized ice cream |
 | ![Partial smiley](images/smiley_face/sample_1_smiley%20face_partial.png) <br> (g) Partial smiley | ![Reconstruction smiley](images/smiley_face/sample_smiley%20face_1_reconstruction.png) <br> (h) Reconstructed smiley | ![Binarized smiley](images/smiley_face/sample_smiley%20face_1_reconstruction_binarized.png) <br> (i) Binarized smiley |
 
-Example of multiple different ice creams generated from the same input image (cone):
+Example of multiple different ice cream reconstructions from the same input image (cone):
 
-<img src="images/stochastic.png" width="600" />
+<img src="images/stochastic.png" />
 
-View more examples in the `images` directory.
+You can view more examples in the `images` directory.
 
