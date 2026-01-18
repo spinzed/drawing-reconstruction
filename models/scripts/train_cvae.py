@@ -4,6 +4,8 @@ from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import os
+from evaluation_train import generate_and_save_images
 
 from models.cvae_model import CVAE as VAE
 from data.dataset import ImageDataset
@@ -19,9 +21,9 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 image_limit =  25000
 image_size = (64, 64)
 binarization_threshold = 0.5
-model_weights_save_path = "smiley_face.pth"
+model_weights_save_path = "weights/mug.pth"
 #item = "cat"
-item = "smiley face"
+item = "mug"
 model_residual = False
 latent_dim  = 512
 checkpointing = True
@@ -34,7 +36,6 @@ config = {
     "weight_decay": 1e-9,
     "grad_clip": 0.01,
     "loss": VAE.loss
-    #"loss": nn.L1Loss(),
 }
 
 # ---------------------------------------------------------------------
@@ -89,9 +90,26 @@ def binarize(img, binarization_threshold=binarization_threshold):
     binary[img < binarization_threshold] = 0
     return binary
 
-def save_model(model, model_weights_save_path=model_weights_save_path):
-    torch.save(model.state_dict(), model_weights_save_path)
-    print(f"Model weights saved to {model_weights_save_path}")
+def save_model(model, epoch=None, train_images_num=None):
+    checkpoint = {
+        "model_type": "CVAE",
+        "image_size": image_size,
+        "train_images": train_images_num,
+        "epoch": epoch,
+        "supported_classes": [item],
+        "weights": model.state_dict(),
+        "latent_dim": latent_dim,
+    }
+    path = model_weights_save_path
+    if train_images_num is not None:
+        path += f"_n{train_images_num}"
+    if epoch is not None:
+        path += f"_epoch{epoch}"
+    path += ".pth"
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(checkpoint, path)
+    print(f"Model weights saved to {path}")
 
 # ---------------------------------------------------------------------
 # Train function
@@ -119,7 +137,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
         for epoch in range(epochs):
             print(f"Epoch {epoch+1}/{epochs}")
             model.train()
-            
+
             if epoch < len(betas):
                 beta = betas[epoch]
             else:
@@ -131,7 +149,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 y_ = y_.to(device, dtype=torch.float32)
                 X = X.unsqueeze(1)
                 y_ = y_.unsqueeze(1)
-                
+
                 z, mu_p, logvar_p, mu_q, logvar_q, x_logits, x_prob = model(X, y_)
                 
                 L , _, _= loss(X, y_, mu_p, logvar_p, mu_q, logvar_q, x_logits, beta=beta)
@@ -139,7 +157,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 L.backward()
                 if config["grad_clip"] is not None:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), config["grad_clip"])
-                grad_norm = np.sqrt(sum([torch.norm(p.grad)**2 for p in model.parameters()]).cpu())
+                grad_norm = torch.sqrt(sum([torch.norm(p.grad)**2 for p in model.parameters()])).cpu()
                 optimizer.step()
 
                 #print(f"---> {i+1}/{len(train_loader)}, loss: {L:.6f}, grad_norm: {grad_norm:.6f}")
@@ -192,7 +210,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 print(f"Min pixel: {np.min(img_val_reconstructed)}")
 
             if epoch % 5 == 0 and checkpointing:
-                save_model(model, f"checkpoint_epoch_{epoch}_{model_weights_save_path}")
+                save_model(model, epoch=epoch, train_images_num=len(train_loader.dataset))
         
     except KeyboardInterrupt:
         print("Early stop")
@@ -215,13 +233,16 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
     Ls_train = np.array(Ls_train)
     np.save(f"{item}_val_loss.npy", Ls_val)
     np.save(f"{item}_train_loss.npy", Ls_train)
+    image_dir = f"images_{item}"
+    os.makedirs(os.path.dirname(image_dir), exist_ok=True)
+
+    generate_and_save_images(model, test_loader, image_dir, 'cuda', item, 20)
 
 # ---------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------
 
 if __name__ == "__main__":
-    print(image_size[0])
     model = VAE(image_size[0], latent_dim, torch.device(device))
 
     dataset = ImageDataset(dataset_dir, image_size, image_limit, item=item)
@@ -245,34 +266,3 @@ if __name__ == "__main__":
     print(f"Final losses: train - {L_train:.6f}, val - {L_val:.6f}, test - {L_test:.6f}")
 
     save_model(model)
-
-    try:
-        while True:
-            i = np.random.randint(0, len(test_set))
-            img_full, img_partial, cat = test_set[i]
-            y = img_partial.reshape((1, image_size[0] * image_size[1]))
-            xd = x.to(device, dtype=torch.float32)
-            xd = img_full.to(device, dtype=torch.float32)
-            with torch.no_grad():
-                outd, _, _ = model(xd, yd)
-                yd = get_y(xd, outd)
-                yd = yd.reshape(image_size)
-            y = yd.cpu()
-
-            L = loss(yd, y_d)
-            print(f"Loss: {L}")
-
-            img_reconstructed = y
-            img_reconstructed_binary = binarize(img_reconstructed)
-
-            n_graphs = 4
-            f, axarr = plt.subplots(1, n_graphs, figsize=(3 * n_graphs, 4))
-            visualize(
-                axarr,
-                [img_partial, img_full, img_reconstructed, img_reconstructed_binary],
-                ["Partial", "Full", "Reconstructed", "Binarized"]
-            )
-            plt.show()
-
-    except KeyboardInterrupt:
-        print("Done")

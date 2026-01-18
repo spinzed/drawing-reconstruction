@@ -17,19 +17,19 @@ image_size = (64, 64)
 batch_size = 64
 device = "cuda" if torch.cuda.is_available() else "cpu"
 latent_dim = 512
-item = "book"
+item = "mug"
 binarization_threshold = 0.5
 
 model_weights_path = (
     "/home/steffy/Desktop/Data/studenti/antonio_skara/"
-    "drawing-reconstruction/checkpoint_epoch_35_book.pth"
+    "drawing-reconstruction/weights/mug.pth_n17500_epoch30.pth"
 
 )
 
 image_limit = 100
 
 # Output directory for qualitative results
-output_dir = "images/book"
+output_dir = "images/mug"
 os.makedirs(output_dir, exist_ok=True)
 
 # ---------------------------------------------------------------------
@@ -37,7 +37,8 @@ os.makedirs(output_dir, exist_ok=True)
 # ---------------------------------------------------------------------
 
 model = CVAE(image_size[0], latent_dim, device)
-model.load_state_dict(torch.load(model_weights_path, map_location=device))
+weights = torch.load(model_weights_path, weights_only=True)["weights"]
+model.load_state_dict(weights)
 model.to(device)
 model.eval()
 

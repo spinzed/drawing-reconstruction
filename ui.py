@@ -1,5 +1,6 @@
+import cv2
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QTextEdit
+    QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QTextEdit, QCheckBox, QSpinBox, QSlider
 )
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt, Signal
@@ -11,7 +12,7 @@ import data.utils as utils
 import data.loader as loader
 
 binarize = False
-img_shape = (256, 256)
+canvas_shape = (64, 64)
 weights_dir = "weights"
 
 def numpy_to_qpixmap(arr: np.ndarray) -> QPixmap:
@@ -82,7 +83,7 @@ class InteractiveImage(QLabel):
         label_w, label_h = self.width(), self.height()
         #pixmap = self.pixmap()
         #pm_w, pm_h = pixmap.width(), pixmap.height()
-        pm_w, pm_h = img_shape # TODO: fix properly
+        pm_w, pm_h = canvas_shape # TODO: fix properly
 
         scale = min(label_w / pm_w, label_h / pm_h)
         drawn_w = pm_w * scale
@@ -142,7 +143,7 @@ Main app
 class ImageApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.loader = loader.Loader(img_shape)
+        self.loader = loader.Loader(image_size=canvas_shape)
         self.generator = None
         self.category = None
         self.setWindowTitle("Generated Image Viewer")
@@ -157,6 +158,32 @@ class ImageApp(QWidget):
         self.weights_dropdown.addItems(self.weight_options)
         self.weights_dropdown.setCurrentIndex(-1)
         self.weights_dropdown.currentTextChanged.connect(self.on_weight_file_change)
+
+        # --- Output filter controls ---
+        self.canny_checkbox = QCheckBox("Canny")
+        self.canny_down = QSpinBox()
+        self.canny_up = QSpinBox()
+        self.canny_down.setMinimum(0)
+        self.canny_down.setMaximum(255)
+        self.canny_down.setValue(100)
+        self.canny_up.setMinimum(0)
+        self.canny_up.setMaximum(255)
+        self.canny_up.setValue(200)
+        self.canny_checkbox.stateChanged.connect(self.on_output_filter_change)
+        self.canny_down.valueChanged.connect(self.on_output_filter_change)
+        self.canny_up.valueChanged.connect(self.on_output_filter_change)
+
+        self.binarize_checkbox = QCheckBox("Binarize")
+        self.binarize_checkbox.stateChanged.connect(self.on_output_filter_change)
+
+        self.binarize_threshold = QSlider(Qt.Horizontal)
+        self.binarize_threshold.setMinimum(0.0)
+        self.binarize_threshold.setMaximum(100.0)
+        self.binarize_threshold.setValue(50.0)
+        self.binarize_threshold.valueChanged.connect(self.on_output_filter_change)
+
+        self.threshold_label = QLabel("--")
+        self.threshold_label.setFixedWidth(40)
 
         # --- Image labels ---
         self.image1 = InteractiveImage()
@@ -180,8 +207,8 @@ class ImageApp(QWidget):
         #self.set_canvas((utils.compile_img_from_sequence(sequence, img_shape=(512, 512)) * 255).astype(np.uint8))
 
         # --- Buttons ---
-        self.redraw_button = QPushButton(text="Redraw")
-        self.redraw_button.clicked.connect(self.on_redraw)
+        self.redraw_button = QPushButton(text="Regenerate")
+        self.redraw_button.clicked.connect(self.on_regenerate)
 
         self.reset_button = QPushButton(text="Reset")
         self.reset_button.clicked.connect(self.on_reset)
@@ -191,6 +218,14 @@ class ImageApp(QWidget):
         dropdowns_layout.addWidget(self.weights_dropdown)
         dropdowns_layout.addWidget(self.cat_dropdown)
 
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(self.canny_checkbox)
+        filter_layout.addWidget(self.canny_down)
+        filter_layout.addWidget(self.canny_up)
+        filter_layout.addWidget(self.binarize_checkbox)
+        filter_layout.addWidget(self.binarize_threshold)
+        filter_layout.addWidget(self.threshold_label)
+
         images_layout = QHBoxLayout()
         images_layout.addWidget(self.image1)
         images_layout.addWidget(self.image2)
@@ -199,17 +234,18 @@ class ImageApp(QWidget):
         buttons_layout.addWidget(self.redraw_button)
         buttons_layout.addWidget(self.reset_button)
 
-        # info area below the buttons (static info/help text)
+        # -- Info Area (static info/help text) --
         self.info_area = QTextEdit()
         self.info_area.setReadOnly(True)
         self.info_area.setPlainText(
-            "Info:\n- Draw on the left canvas using the mouse.\n- Click 'Redraw' to regenerate a reconstruction.\n- Click 'Reset' to clear the canvas.\n- Load weights via the dropdown to enable a generator."
+            "Info:\n- Draw on the left canvas using the mouse.\n- Click 'Regenerate' to regenerate a reconstruction.\n- Click 'Reset' to clear the canvas.\n- Load weights via the dropdown to enable a generator."
         )
         self.info_area.setFixedHeight(120)
         self.info_area.setStyleSheet("background: #f5f5f5;")
 
         main_layout = QVBoxLayout(self)
         main_layout.addLayout(dropdowns_layout)
+        main_layout.addLayout(filter_layout)
         main_layout.addLayout(images_layout)
         main_layout.addLayout(buttons_layout)
         main_layout.addWidget(self.info_area)
@@ -218,6 +254,16 @@ class ImageApp(QWidget):
     def on_category_change(self, cat):
         print(f"Selected category: {cat}")
         self.category = cat
+
+    def on_output_filter_change(self):
+        canny_checked = self.canny_checkbox.isChecked()
+        down = self.canny_down.value()
+        up = self.canny_up.value()
+        binarize_checked = self.binarize_checkbox.isChecked()
+        threshold = self.binarize_threshold.value() / 100.0
+        self.threshold_label.setText(f"{threshold:.2f}")
+        print(f"Output filter changed: Canny(enabled={canny_checked}, down={down}, up={up}), Binarize(enabled={binarize_checked}, threshold={threshold:.2f})")
+        self.set_generated(self.generated_image)
 
     def on_weight_file_change(self, filename):
         file = os.path.join(weights_dir, filename)
@@ -233,7 +279,13 @@ class ImageApp(QWidget):
             return
         print(f"Weights successfuly set: {file}")
         params = "\n".join([f"    - {k}: {v}" for k, v in self.generator.additional_params().items()])
-        self.set_info(f"Model: {self.generator.model_type}\nSupported categories: {', '.join(self.generator.supported_classes)}\nModel params:\n{params}")
+        info = f"Model: {self.generator.model_type}\nSupported categories: {', '.join(self.generator.supported_classes)}"
+        if self.generator.checkpoint.get("epoch") is not None:
+            info += f"\nTrained epochs: {self.generator.checkpoint['epoch']}"
+        if self.generator.checkpoint.get('train_images') is not None:
+            info += f"\nNumber of images in train set: {self.generator.checkpoint['train_images']}"
+        info += f"\nModel params:\n{params}"
+        self.set_info(info)
 
         self.cat_dropdown.clear()
         self.cat_dropdown.addItems(self.generator.supported_classes)
@@ -249,7 +301,7 @@ class ImageApp(QWidget):
         self.strokes[-1][0].append(x)
         self.strokes[-1][1].append(y)
 
-    def on_redraw(self):
+    def on_regenerate(self):
         self.generate()
 
     def on_reset(self):
@@ -263,7 +315,25 @@ class ImageApp(QWidget):
         ))
 
     def set_generated(self, img: np.ndarray):
-        pixmap = numpy_to_qpixmap(img)
+        self.generated_image = img
+
+        img = img.copy()
+
+        # interpolate from model size to canvas size
+        if img.shape != canvas_shape:
+            img = cv2.resize(img, canvas_shape, interpolation=cv2.INTER_LINEAR)
+
+        # filters
+        if self.canny_checkbox.isChecked():
+            low = self.canny_down.value()
+            high = self.canny_up.value()
+            img = np.subtract(255, cv2.Canny((img * 255).astype(np.uint8), low, high))
+
+        if self.binarize_checkbox.isChecked():
+            img[img >= self.binarize_threshold.value()] = 255
+            img[img < self.binarize_threshold.value()] = 0
+
+        pixmap = numpy_to_qpixmap(img) # img must be uint8
         self.image2.setPixmap(pixmap.scaled(
             300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation
         ))
@@ -276,7 +346,7 @@ class ImageApp(QWidget):
 
     # --- Actions ---
     def reset_canvas(self):
-        empty = (np.ones(img_shape) * 255).astype(np.uint8)
+        empty = (np.ones(canvas_shape) * 255).astype(np.uint8)
         self.canvas = empty
         self.strokes = []
         self.set_canvas(self.canvas)
@@ -290,8 +360,9 @@ class ImageApp(QWidget):
             print("No valid generator loaded")
             return
 
-        float_img = (self.canvas / 255).astype(np.float32)
-        generated = self.generator.generate(float_img, self.strokes)
+        print("Generating...")
+
+        generated = self.generator.generate(self.canvas, self.strokes)
         self.set_generated((generated * 255).astype(np.uint8))
 
 if __name__ == "__main__":

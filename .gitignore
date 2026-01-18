@@ -4,5 +4,6 @@ env.sh
 *.pth
 *.npz
 venv
+weights
 checkpoints
 output

@@ -48,7 +48,7 @@ def Loader():
             return None
 
         model_type = checkpoint["model_type"]
-
+        print(model_type)
         if model_type == "VAE":
             generator = VaeGenerator()
         elif model_type == "ConvVAE":
@@ -159,7 +159,7 @@ class CVaeGenerator(Generator):
 
 class CVaeDekoderzGenerator(Generator):
     def init_model(self, checkpoint):
-        self.model = cvae_model_decoderz.CVAE(self.image_size[0], checkpoint["latent_dim"], device=torch.device(device))
+        self.model = cvae_model.CVAE(self.image_size[0], checkpoint["latent_dim"], device=torch.device(device))
         self.model = self.model.to(device)
 
     def set_weights(self, checkpoint):
