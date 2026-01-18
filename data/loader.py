@@ -1,3 +1,4 @@
+from matplotlib import pyplot as plt
 import torch
 import numpy as np
 from models import cvae_model
@@ -108,9 +109,12 @@ class CVaeGenerator(Generator):
         if not self.weights_set:
             raise RuntimeError("weights must be set first")
 
-        img_gen_size = utils.compile_img_from_strokes(strokes, img_shape=self.image_size)
-        #img_gen_size = utils.erode_image(img_gen_size)
+        img_gen_size = utils.compile_img_from_strokes(strokes, img_shape=self.image_size, pad=0)
+        img_gen_size = utils.erode_image(img_gen_size)
         img_gen_size = img_gen_size.astype(np.float32)
+
+        plt.imshow(img_gen_size, cmap='gray')
+        plt.show()
 
         self.model.eval()
         y = torch.tensor(img_gen_size, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
@@ -138,7 +142,8 @@ class CVaeDekoderzGenerator(Generator):
             raise RuntimeError("weights must be set first")
 
         img_gen_size = utils.compile_img_from_strokes(strokes, img_shape=self.image_size)
-        #img_gen_size = utils.erode_image(img_gen_size)
+        #img_gen_size = cv2.resize(img, self.image_size, interpolation=cv2.INTER_NEAREST)
+        img_gen_size = utils.erode_image(img_gen_size)
         img_gen_size = img_gen_size.astype(np.float32)
 
         self.model.eval()

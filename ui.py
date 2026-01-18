@@ -330,8 +330,9 @@ class ImageApp(QWidget):
             img = np.subtract(255, cv2.Canny((img * 255).astype(np.uint8), low, high))
 
         if self.binarize_checkbox.isChecked():
-            img[img >= self.binarize_threshold.value()] = 255
-            img[img < self.binarize_threshold.value()] = 0
+            threshold = (self.binarize_threshold.value() / 100.0) * 256.0
+            img[img >= threshold] = 255
+            img[img < threshold] = 0
 
         pixmap = numpy_to_qpixmap(img) # img must be uint8
         self.image2.setPixmap(pixmap.scaled(

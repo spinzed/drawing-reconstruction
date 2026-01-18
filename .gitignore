@@ -5,5 +5,5 @@ env.sh
 *.npz
 venv
 weights
-checkpoints
+checkpoints*
 output
