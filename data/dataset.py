@@ -44,8 +44,8 @@ class ImageDataset(Dataset):
 
         if with_strokes:
             num_strokes = max(int(len(strokes) * percentage), 1)
-            y = ut.compile_img(strokes, shape=self.image_shape, end=num_strokes)
-            x = ut.compile_img(strokes, shape=self.image_shape)
+            y = ut.compile_img_from_strokes(strokes, img_shape=self.image_shape, end=num_strokes)
+            x = ut.compile_img_from_strokes(strokes, img_shape=self.image_shape)
         else:
             sequence = ut.strokes_to_relative_sequence(strokes)
             num_strokes = max(int(len(sequence) * percentage), 1)

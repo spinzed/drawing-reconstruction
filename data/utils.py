@@ -50,14 +50,14 @@ def lerp(x1, y1, x2, y2):
 
     return xs, ys
 
-def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None, pad=10):
+def compile_img_from_strokes(strokes, img_shape=(256, 256), img=None, start=0, end=None, pad=10):
     assert end is None or end <= len(strokes), "end must be smaller or equal to list size"
 
     if img is None:
-        img = np.ones(shape)
+        img = np.ones(img_shape)
 
-    scale_x = (shape[1] - pad) / 256
-    scale_y = (shape[0] - pad) / 256
+    scale_x = (img_shape[1] - pad) / 256
+    scale_y = (img_shape[0] - pad) / 256
 
     # draw each stroke
     for stroke_ind in range(start, end if end is not None else len(strokes)):
@@ -88,7 +88,7 @@ def compile_img(strokes, shape=(256, 256), img=None, start=0, end=None, pad=10):
     return img
 
 """
-Sequence is an array-like of shape (seq_length, [dx, dy, stroke_end(bool)])
+Sequence is an array-like of shape [seq_length, [dx, dy, stroke_end(bool)]]
 """
 def compile_img_from_sequence(sequence, relative_offsets=True, img_shape=(256, 256), img=None, pad=10):
     if img is None:
@@ -190,7 +190,7 @@ class CompileTest:
     def test(self, index=0, size=100):
         strokes = self.test_data[index]["drawing"]
         print(f"strokes size: {len(strokes)}")
-        img = compile_img(strokes, end=min(len(strokes), size))
+        img = compile_img_from_strokes(strokes, end=min(len(strokes), size))
 
         plt.imshow(img, cmap="grey")
         plt.show()

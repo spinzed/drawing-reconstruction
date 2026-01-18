@@ -1,10 +1,9 @@
 import torch
 import numpy as np
-from scripts import vae_model_classic_bernoulli
-from scripts import cvae_model
-from scripts import cvae_model_decoderz
-from scripts import sketch_rnn_model
-from data import utils as ut
+from models import cvae_model
+from models import cvae_model_decoderz
+from models import sketch_rnn_model
+from data import utils
 import os
 
 binarization_threshold = 0.5
@@ -44,9 +43,7 @@ class Loader:
 
         model_type = checkpoint["model_type"]
 
-        if model_type == "ConvVAE":
-            generator = ConvVaeGenerator()
-        elif model_type == "CVAE":
+        if model_type == "CVAE":
             generator = CVaeGenerator()
         elif model_type == "CVAE_Decoderz":
             generator = CVaeDekoderzGenerator()
@@ -56,7 +53,12 @@ class Loader:
             print(f"unknown model type {model_type}")
             return None
 
-        generator.init(model_type, self.image_size, checkpoint["supported_classes"], checkpoint)
+        generator.init(model_type, checkpoint["supported_classes"], checkpoint)
+
+        # for models that don't work on pixels like sketchrnn
+        if generator.image_size is None:
+            generator.image_size = self.image_size
+
         generator.set_weights(checkpoint)
 
         return generator
@@ -65,11 +67,11 @@ class Loader:
 Base implementation for image generators for each model type.
 """
 class Generator():
-    def init(self, model_type, image_size, supported_classes, checkpoint):
+    def init(self, model_type, supported_classes, checkpoint):
         self.model_type = model_type
-        self.image_size = image_size
         self.supported_classes = supported_classes
         self.weights_set = False
+        self.image_size = None
         self.init_model(checkpoint)
         self.set_weights(checkpoint)
 
@@ -90,35 +92,9 @@ class Generator():
     def additional_params(self):
         return dict()
 
-class ConvVaeGenerator(Generator):
-    def init_model(self, checkpoint):
-        self.weights_file = None
-        self.model = vae_model_classic_bernoulli.VAE(self.image_size[0], checkpoint["latent_dim"], device=torch.device(device))
-        self.model = self.model.to(device)
-
-    def set_weights(self, checkpoint):
-        self.model.load_state_dict(checkpoint["weights"])
-        self.weights_set = True
-
-    def generate(self, img, strokes):
-        if not self.weights_set:
-            raise RuntimeError("weights must be set first")
-
-        self.model.eval()
-        imgd = torch.tensor(img, dtype=torch.float32, device=device)
-        X = imgd.unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
-        with torch.no_grad():
-            enc_mean, enc_logvar, dec_mean, _ = self.model(X)
-            out_probs = torch.sigmoid(dec_mean)
-            out_t = get_y(X, out_probs)
-        out = out_t.squeeze(0).squeeze(0).cpu().detach().numpy()
-        return out
-
-    def additional_params(self):
-        return {"latent dim": self.model.latent_dim}
-
 class CVaeGenerator(Generator):
     def init_model(self, checkpoint):
+        self.image_size = checkpoint["image_size"]
         self.model = cvae_model.CVAE(self.image_size[0], checkpoint["latent_dim"], device=torch.device(device))
         self.model = self.model.to(device)
 
@@ -130,18 +106,22 @@ class CVaeGenerator(Generator):
         if not self.weights_set:
             raise RuntimeError("weights must be set first")
 
+        img_gen_size = utils.compile_img_from_strokes(strokes, img_shape=self.image_size)
+        float_img = (img_gen_size / 255).astype(np.float32)
+
         self.model.eval()
-        y = torch.tensor(img, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
+        y = torch.tensor(float_img, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
         with torch.no_grad():
             x_prob = self.model.sample(y)
         out = x_prob.squeeze(0).squeeze(0).cpu().detach().numpy()
         return out
 
     def additional_params(self):
-        return {"latent dim": self.model.latent_dim}
+        return {"image_size": self.image_size, "latent dim": self.model.latent_dim}
 
 class CVaeDekoderzGenerator(Generator):
     def init_model(self, checkpoint):
+        self.image_size = checkpoint["image_size"]
         self.model = cvae_model_decoderz.CVAE(self.image_size[0], checkpoint["latent_dim"], device=torch.device(device))
         self.model = self.model.to(device)
 
@@ -153,15 +133,21 @@ class CVaeDekoderzGenerator(Generator):
         if not self.weights_set:
             raise RuntimeError("weights must be set first")
 
+        img_gen_size = utils.compile_img_from_strokes(strokes, img_shape=self.image_size)
+        float_img = (img_gen_size / 255).astype(np.float32)
+
         self.model.eval()
-        y = torch.tensor(img, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
+        y = torch.tensor(float_img, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)  # shape (1,1,H,W)
         with torch.no_grad():
             x_prob = self.model.sample(y)
         out = x_prob.squeeze(0).squeeze(0).cpu().detach().numpy()
+
+
+
         return out
 
     def additional_params(self):
-        return {"latent dim": self.model.latent_dim}
+        return {"image_size": self.image_size, "latent dim": self.model.latent_dim}
 
 class SketchRNNGenerator(Generator):
     def init_model(self, checkpoint):
@@ -181,7 +167,7 @@ class SketchRNNGenerator(Generator):
         self.model.encoder.eval()
         self.model.decoder.eval()
 
-        in_sequence = ut.strokes_to_relative_sequence(strokes, offset=(-self.image_size[1]//2, -self.image_size[0]//2))
+        in_sequence = utils.strokes_to_relative_sequence(strokes, offset=(-self.image_size[1]//2, -self.image_size[0]//2))
         with torch.no_grad():
             out_sequence = self.model.sample(in_sequence)
 

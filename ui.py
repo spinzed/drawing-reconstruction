@@ -11,7 +11,7 @@ import data.utils as utils
 import data.loader as loader
 
 binarize = False
-img_shape = (256, 256)
+canvas_shape = (256, 256)
 weights_dir = "weights"
 
 def numpy_to_qpixmap(arr: np.ndarray) -> QPixmap:
@@ -82,7 +82,7 @@ class InteractiveImage(QLabel):
         label_w, label_h = self.width(), self.height()
         #pixmap = self.pixmap()
         #pm_w, pm_h = pixmap.width(), pixmap.height()
-        pm_w, pm_h = img_shape # TODO: fix properly
+        pm_w, pm_h = canvas_shape # TODO: fix properly
 
         scale = min(label_w / pm_w, label_h / pm_h)
         drawn_w = pm_w * scale
@@ -142,7 +142,7 @@ Main app
 class ImageApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.loader = loader.Loader(img_shape)
+        self.loader = loader.Loader(image_size=canvas_shape)
         self.generator = None
         self.category = None
         self.setWindowTitle("Generated Image Viewer")
@@ -180,8 +180,8 @@ class ImageApp(QWidget):
         #self.set_canvas((utils.compile_img_from_sequence(sequence, img_shape=(512, 512)) * 255).astype(np.uint8))
 
         # --- Buttons ---
-        self.redraw_button = QPushButton(text="Redraw")
-        self.redraw_button.clicked.connect(self.on_redraw)
+        self.redraw_button = QPushButton(text="Regenerate")
+        self.redraw_button.clicked.connect(self.on_regenerate)
 
         self.reset_button = QPushButton(text="Reset")
         self.reset_button.clicked.connect(self.on_reset)
@@ -203,7 +203,7 @@ class ImageApp(QWidget):
         self.info_area = QTextEdit()
         self.info_area.setReadOnly(True)
         self.info_area.setPlainText(
-            "Info:\n- Draw on the left canvas using the mouse.\n- Click 'Redraw' to regenerate a reconstruction.\n- Click 'Reset' to clear the canvas.\n- Load weights via the dropdown to enable a generator."
+            "Info:\n- Draw on the left canvas using the mouse.\n- Click 'Regenerate' to regenerate a reconstruction.\n- Click 'Reset' to clear the canvas.\n- Load weights via the dropdown to enable a generator."
         )
         self.info_area.setFixedHeight(120)
         self.info_area.setStyleSheet("background: #f5f5f5;")
@@ -249,7 +249,7 @@ class ImageApp(QWidget):
         self.strokes[-1][0].append(x)
         self.strokes[-1][1].append(y)
 
-    def on_redraw(self):
+    def on_regenerate(self):
         self.generate()
 
     def on_reset(self):
@@ -276,7 +276,7 @@ class ImageApp(QWidget):
 
     # --- Actions ---
     def reset_canvas(self):
-        empty = (np.ones(img_shape) * 255).astype(np.uint8)
+        empty = (np.ones(canvas_shape) * 255).astype(np.uint8)
         self.canvas = empty
         self.strokes = []
         self.set_canvas(self.canvas)
@@ -290,8 +290,7 @@ class ImageApp(QWidget):
             print("No valid generator loaded")
             return
 
-        float_img = (self.canvas / 255).astype(np.float32)
-        generated = self.generator.generate(float_img, self.strokes)
+        generated = self.generator.generate(self.canvas, self.strokes)
         self.set_generated((generated * 255).astype(np.uint8))
 
 if __name__ == "__main__":

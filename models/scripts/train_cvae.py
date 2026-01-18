@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import os
 
 from models.cvae_model import CVAE as VAE
 from data.dataset import ImageDataset
@@ -19,9 +20,8 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 image_limit = 25000
 image_size = (64, 64)
 binarization_threshold = 0.55
-#item = "cat"
 item = "book"
-model_weights_save_path = f"weights/weights_cvae_{item}"
+model_weights_save_path = f"checkpoints/weights_cvae_{item}"
 model_residual = False
 latent_dim  = 256
 checkpointing = True
@@ -34,7 +34,6 @@ config = {
     "weight_decay": 1e-8,
     "grad_clip": 0.01,
     "loss": VAE.loss
-    #"loss": nn.L1Loss(),
 }
 
 # ---------------------------------------------------------------------
@@ -94,6 +93,7 @@ def save_model(model, epoch=None):
         path += f"_epoch{epoch}"
     path += ".pth"
 
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     torch.save(checkpoint, path)
     print(f"Model weights saved to {path}")
 
@@ -143,7 +143,7 @@ def train(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, co
                 L.backward()
                 if config["grad_clip"] is not None:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), config["grad_clip"])
-                grad_norm = np.sqrt(sum([torch.norm(p.grad)**2 for p in model.parameters()]).cpu())
+                grad_norm = torch.sqrt(sum([torch.norm(p.grad)**2 for p in model.parameters()])).cpu()
                 optimizer.step()
 
                 #print(f"---> {i+1}/{len(train_loader)}, loss: {L:.6f}, grad_norm: {grad_norm:.6f}")
