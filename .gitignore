@@ -3,6 +3,7 @@ env.sh
 *.ndjson
 *.pth
 *.npz
+*.npy
 venv
 weights
 checkpoints*
